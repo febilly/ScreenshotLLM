@@ -25,7 +25,8 @@ from image_processor import process_image
 def process_hotkey(config):
     """处理单个快捷键触发的完整流程"""
     hotkey_name = next(key for key, val in HOTKEY_CONFIGS.items() if val == config)
-    print(f"\n[*] 检测到快捷键 '{hotkey_name}'，开始处理...")
+    config_name = config.get('name', '未知模式')
+    print(f"\n[*] 检测到快捷键 '{hotkey_name}'，开始处理... 模式: {config_name}")
     
     # 1. 立刻截取全屏
     full_screenshot = take_screenshot()
@@ -36,7 +37,7 @@ def process_hotkey(config):
     bbox = None
     try:
         from region_selector import select_region_on_image
-        bbox = select_region_on_image(full_screenshot)
+        bbox = select_region_on_image(full_screenshot, config_name)
     except Exception as e:
         print(f"[-] 区域选择失败: {e}")
         show_notification("错误", f"区域选择失败: {e}", threaded=True)
@@ -75,17 +76,25 @@ def handle_task_queue(root):
     """处理队列中的任务"""
     try:
         while True:
-            task_type, data = task_queue.get(block=False)
-            if task_type == 'select_region':
-                selector = RegionSelector(root, data)
-                # 先隐藏主窗口，显示选择界面
-                root.withdraw()
-                selector.top.mainloop()
-                result_queue.put(selector.get_selection())
-                # 重新显示主窗口
-                root.deiconify()
-                root.withdraw()
-                break
+            task_data = task_queue.get(block=False)
+            if len(task_data) >= 3 and task_data[0] == 'select_region':
+                task_type, screenshot_image, config_name = task_data
+                selector = RegionSelector(root, screenshot_image, config_name)
+            elif len(task_data) == 2 and task_data[0] == 'select_region':
+                # 向后兼容
+                task_type, screenshot_image = task_data
+                selector = RegionSelector(root, screenshot_image)
+            else:
+                continue
+                
+            # 先隐藏主窗口，显示选择界面
+            root.withdraw()
+            selector.top.mainloop()
+            result_queue.put(selector.get_selection())
+            # 重新显示主窗口
+            root.deiconify()
+            root.withdraw()
+            break
     except:
         pass
     # 每100ms检查一次队列
@@ -112,7 +121,8 @@ def main():
     print("正在监听以下快捷键:")
 
     for hotkey, config in HOTKEY_CONFIGS.items():
-        print(f"  - {hotkey}: 使用模型 '{config['model']}'")
+        config_name = config.get('name', '未知模式')
+        print(f"  - {hotkey}: {config_name} (模型: {config['model']})")
         keyboard.add_hotkey(hotkey, lambda data=config: threading.Thread(target=process_hotkey, args=(data,)).start())
 
     print("\n脚本正在后台运行。您可以使用设定的快捷键进行截图和分析。")

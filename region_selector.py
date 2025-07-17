@@ -12,18 +12,19 @@ from PIL import ImageTk
 task_queue = queue.Queue()
 result_queue = queue.Queue()
 
-def select_region_on_image(screenshot_image):
+def select_region_on_image(screenshot_image, config_name=None):
     """在一个静态的截图上允许用户选择矩形区域 - 使用队列确保在主线程中执行"""
     # 将任务放入队列
-    task_queue.put(('select_region', screenshot_image))
+    task_queue.put(('select_region', screenshot_image, config_name))
     # 等待结果
     result = result_queue.get()
     return result
 
 class RegionSelector:
-    def __init__(self, master, screenshot_image):
+    def __init__(self, master, screenshot_image, config_name=None):
         self.master = master
         self.image = screenshot_image
+        self.config_name = config_name if config_name else "截图分析"
         # 将Pillow图像转换为Tkinter可以使用的格式
         self.tk_image = ImageTk.PhotoImage(self.image)
 
@@ -65,6 +66,55 @@ class RegionSelector:
         self.image_offset_x = 0
         self.image_offset_y = 0
         self.canvas_image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
+
+        # 在左上角显示配置名称
+        title_text = f"模式: {self.config_name}"
+        
+        # 先创建临时文字对象来测量实际尺寸
+        temp_text = self.canvas.create_text(0, 0, text=title_text, font=("微软雅黑", 16, "bold"))
+        text_bbox = self.canvas.bbox(temp_text)
+        self.canvas.delete(temp_text)  # 删除临时文字
+        
+        # 计算实际文字尺寸
+        if text_bbox:
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+        else:
+            # fallback 到估算值
+            text_width = len(title_text) * 10
+            text_height = 20
+        
+        # 添加内边距
+        padding = 8
+        bg_x1 = 10
+        bg_y1 = 10
+        bg_x2 = bg_x1 + text_width + padding * 2
+        bg_y2 = bg_y1 + text_height + padding * 2
+        
+        # 创建半透明背景矩形
+        self.title_bg = self.canvas.create_rectangle(
+            bg_x1, bg_y1, bg_x2, bg_y2,
+            fill="black",
+            stipple="gray50",  # 使用stipple创建半透明效果
+            outline="",
+            tags="title_bg"
+        )
+        
+        # 创建文字，位置在背景中心
+        text_x = bg_x1 + padding
+        text_y = bg_y1 + padding
+        
+        self.title_text = self.canvas.create_text(
+            text_x, text_y, 
+            text=title_text, 
+            anchor="nw",
+            font=("微软雅黑", 16, "bold"),
+            fill="white",
+            tags="title"
+        )
+        
+        # 确保背景在文字下面
+        self.canvas.tag_lower(self.title_bg, self.title_text)
 
         # 初始化图形元素变量
         self.crosshair_lines = []
