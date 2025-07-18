@@ -12,19 +12,23 @@ from PIL import ImageTk
 task_queue = queue.Queue()
 result_queue = queue.Queue()
 
-def select_region_on_image(screenshot_image, config_name=None):
+def select_region_on_image(screenshot_image, config_name=None, need_red_box=False):
     """在一个静态的截图上允许用户选择矩形区域 - 使用队列确保在主线程中执行"""
     # 将任务放入队列
-    task_queue.put(('select_region', screenshot_image, config_name))
+    task_queue.put(('select_region', screenshot_image, config_name, need_red_box))
     # 等待结果
     result = result_queue.get()
     return result
 
 class RegionSelector:
-    def __init__(self, master, screenshot_image, config_name=None):
+    def __init__(self, master, screenshot_image, config_name=None, need_red_box=False):
         self.master = master
         self.image = screenshot_image
+        self.original_image = screenshot_image  # 保存原始图片
         self.config_name = config_name if config_name else "截图分析"
+        self.need_red_box = need_red_box
+        self.selection_stage = 1  # 1: 选择裁切区域, 2: 选择红框区域
+        self.crop_bbox = None  # 存储第一次选择的裁切区域
         # 将Pillow图像转换为Tkinter可以使用的格式
         self.tk_image = ImageTk.PhotoImage(self.image)
 
@@ -69,6 +73,11 @@ class RegionSelector:
 
         # 在左上角显示配置名称
         title_text = f"模式: {self.config_name}"
+        if self.need_red_box:
+            if self.selection_stage == 1:
+                title_text += " - 第1步: 选择裁切区域"
+            else:
+                title_text += " - 第2步: 选择红框区域"
         
         # 先创建临时文字对象来测量实际尺寸
         temp_text = self.canvas.create_text(0, 0, text=title_text, font=("微软雅黑", 16, "bold"))
@@ -197,24 +206,52 @@ class RegionSelector:
         if not self.is_selecting:
             canvas_x = self.canvas.canvasx(event.x)
             canvas_y = self.canvas.canvasy(event.y)
-            # 使用节流更新来提高性能
-            self.throttled_update(self.update_crosshair, canvas_x, canvas_y)
+            
+            # 检查是否在有效区域内
+            if self.selection_stage == 1:
+                # 第一步：整个图像区域都可以显示十字线
+                if 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height:
+                    self.throttled_update(self.update_crosshair, canvas_x, canvas_y)
+                else:
+                    self.clear_crosshair()
+            else:
+                # 第二步：只在裁切区域内显示十字线
+                crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
+                if crop_x1 <= canvas_x <= crop_x2 and crop_y1 <= canvas_y <= crop_y2:
+                    self.throttled_update(self.update_crosshair, canvas_x, canvas_y)
+                else:
+                    self.clear_crosshair()
 
     def on_mouse_down(self, event):
         canvas_x = self.canvas.canvasx(event.x)
         canvas_y = self.canvas.canvasy(event.y)
         
-        # 检查点击是否在图像区域内
-        if 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height:
-            self.start_x = canvas_x
-            self.start_y = canvas_y
-            self.is_selecting = True
-            
-            # 清除十字线
-            self.clear_crosshair()
-            
-            # 立即显示初始选择框
-            self.update_selection_rect(self.start_x, self.start_y, canvas_x, canvas_y)
+        # 检查点击是否在有效区域内
+        if self.selection_stage == 1:
+            # 第一步：可以在整个图像区域内选择
+            if 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height:
+                self.start_x = canvas_x
+                self.start_y = canvas_y
+                self.is_selecting = True
+                
+                # 清除十字线
+                self.clear_crosshair()
+                
+                # 立即显示初始选择框
+                self.update_selection_rect(self.start_x, self.start_y, canvas_x, canvas_y)
+        else:
+            # 第二步：只能在裁切区域内选择
+            crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
+            if crop_x1 <= canvas_x <= crop_x2 and crop_y1 <= canvas_y <= crop_y2:
+                self.start_x = canvas_x
+                self.start_y = canvas_y
+                self.is_selecting = True
+                
+                # 清除十字线
+                self.clear_crosshair()
+                
+                # 立即显示初始选择框
+                self.update_selection_rect(self.start_x, self.start_y, canvas_x, canvas_y)
 
     def on_mouse_move(self, event):
         if self.is_selecting and self.start_x is not None and self.start_y is not None:
@@ -247,9 +284,151 @@ class RegionSelector:
             x2 = max(0, min(self.image.width, x2))
             y2 = max(0, min(self.image.height, y2))
             
-            self.selection = (x1, y1, x2, y2)
-            self.top.destroy()
-            self.master.quit()
+            # 处理两步选择逻辑
+            if self.selection_stage == 1 and self.need_red_box:
+                # 第一步：选择裁切区域
+                self.crop_bbox = (x1, y1, x2, y2)
+                self.selection_stage = 2
+                self.is_selecting = False
+                
+                # 更新显示的图片为裁切后的图片
+                self.update_to_cropped_image()
+                
+                # 更新标题
+                self.update_title_text()
+                
+                # 重置鼠标状态
+                self.start_x = None
+                self.start_y = None
+                
+                # 清除选择框
+                if self.selection_rect:
+                    self.canvas.delete(self.selection_rect)
+                    self.selection_rect = None
+                
+            else:
+                # 最后一步：完成选择
+                if self.need_red_box and self.selection_stage == 2:
+                    # 将红框坐标转换为相对于裁切区域的坐标
+                    crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
+                    red_box_x1 = x1 - crop_x1
+                    red_box_y1 = y1 - crop_y1
+                    red_box_x2 = x2 - crop_x1
+                    red_box_y2 = y2 - crop_y1
+                    
+                    # 确保红框坐标在裁切区域范围内
+                    crop_width = crop_x2 - crop_x1
+                    crop_height = crop_y2 - crop_y1
+                    red_box_x1 = max(0, min(crop_width, red_box_x1))
+                    red_box_y1 = max(0, min(crop_height, red_box_y1))
+                    red_box_x2 = max(0, min(crop_width, red_box_x2))
+                    red_box_y2 = max(0, min(crop_height, red_box_y2))
+                    
+                    # 返回裁切区域和红框区域的坐标
+                    self.selection = {
+                        'crop_bbox': self.crop_bbox,
+                        'red_box_bbox': (red_box_x1, red_box_y1, red_box_x2, red_box_y2)
+                    }
+                else:
+                    # 普通模式，只返回裁切区域
+                    self.selection = (x1, y1, x2, y2)
+                
+                self.top.destroy()
+                self.master.quit()
+
+    def update_to_cropped_image(self):
+        """更新画布显示，在原始图片上叠加暗色遮罩，突出显示裁切区域"""
+        try:
+            from PIL import Image, ImageDraw
+            
+            # 创建原始图片的副本
+            overlay_img = self.original_image.copy()
+            draw = ImageDraw.Draw(overlay_img)
+            
+            # 在整个图片上添加半透明黑色遮罩
+            overlay = Image.new('RGBA', overlay_img.size, (0, 0, 0, 128))  # 半透明黑色
+            overlay_img = Image.alpha_composite(overlay_img.convert('RGBA'), overlay)
+            
+            # 将裁切区域恢复为原始亮度
+            x1, y1, x2, y2 = self.crop_bbox
+            crop_region = self.original_image.crop(self.crop_bbox)
+            overlay_img.paste(crop_region, (x1, y1))
+            
+            # 在裁切区域周围画一个边框以突出显示
+            draw = ImageDraw.Draw(overlay_img)
+            border_width = 3
+            for i in range(border_width):
+                draw.rectangle([x1-i, y1-i, x2+i, y2+i], outline='lime', width=1)
+            
+            # 转换为RGB并更新Tkinter图片对象
+            self.overlay_image = overlay_img.convert('RGB')
+            self.tk_image = ImageTk.PhotoImage(self.overlay_image)
+            
+            # 删除旧的图片
+            self.canvas.delete(self.canvas_image_id)
+            
+            # 显示新的图片（保持原始尺寸和位置）
+            self.canvas_image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
+            
+            # 更新窗口以确保正确显示
+            self.top.update()
+            
+        except Exception as e:
+            print(f"更新遮罩图片失败: {e}")
+
+    def update_title_text(self):
+        """更新标题文字"""
+        # 删除旧的标题
+        self.canvas.delete("title_bg")
+        self.canvas.delete("title")
+        
+        # 重新创建标题
+        title_text = f"模式: {self.config_name} - 第2步: 选择红框区域"
+        
+        # 先创建临时文字对象来测量实际尺寸
+        temp_text = self.canvas.create_text(0, 0, text=title_text, font=("微软雅黑", 16, "bold"))
+        text_bbox = self.canvas.bbox(temp_text)
+        self.canvas.delete(temp_text)
+        
+        # 计算实际文字尺寸
+        if text_bbox:
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+        else:
+            text_width = len(title_text) * 10
+            text_height = 20
+        
+        # 添加内边距
+        padding = 8
+        bg_x1 = 10
+        bg_y1 = 10
+        bg_x2 = bg_x1 + text_width + padding * 2
+        bg_y2 = bg_y1 + text_height + padding * 2
+        
+        # 创建半透明背景矩形
+        self.title_bg = self.canvas.create_rectangle(
+            bg_x1, bg_y1, bg_x2, bg_y2,
+            fill="black",
+            stipple="gray50",
+            outline="",
+            tags="title_bg"
+        )
+        
+        # 创建文字
+        text_x = bg_x1 + padding
+        text_y = bg_y1 + padding
+        
+        self.title_text = self.canvas.create_text(
+            text_x, text_y, 
+            text=title_text, 
+            anchor="nw",
+            font=("微软雅黑", 16, "bold"),
+            fill="white",
+            tags="title"
+        )
+        
+        # 确保背景在文字下面
+        self.canvas.tag_lower(self.title_bg, self.title_text)
 
     def get_selection(self):
         return self.selection

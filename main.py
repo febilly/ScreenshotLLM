@@ -26,7 +26,10 @@ def process_hotkey(config):
     """处理单个快捷键触发的完整流程"""
     hotkey_name = next(key for key, val in HOTKEY_CONFIGS.items() if val == config)
     config_name = config.get('name', '未知模式')
+    draw_box = config.get('draw_box', False)
     print(f"\n[*] 检测到快捷键 '{hotkey_name}'，开始处理... 模式: {config_name}")
+    if draw_box:
+        print(f"[*] 将在选定区域画红框标识")
     
     # 1. 立刻截取全屏
     full_screenshot = take_screenshot()
@@ -37,19 +40,33 @@ def process_hotkey(config):
     bbox = None
     try:
         from region_selector import select_region_on_image
-        bbox = select_region_on_image(full_screenshot, config_name)
+        bbox = select_region_on_image(full_screenshot, config_name, draw_box)
     except Exception as e:
         print(f"[-] 区域选择失败: {e}")
         show_notification("错误", f"区域选择失败: {e}", threaded=True)
         return
 
     # 3. 检查选区是否有效
-    if not bbox or (bbox[2] - bbox[0]) <= 1 or (bbox[3] - bbox[1]) <= 1:
-        print("[-] 操作取消：选择的区域过小或无效。")
-        return
+    if draw_box:
+        # 画红框模式，检查返回的数据结构
+        if not bbox or not isinstance(bbox, dict) or 'crop_bbox' not in bbox:
+            print("[-] 操作取消：选择的区域无效。")
+            return
+        crop_bbox = bbox['crop_bbox']
+        red_box_bbox = bbox.get('red_box_bbox')
+        if (crop_bbox[2] - crop_bbox[0]) <= 1 or (crop_bbox[3] - crop_bbox[1]) <= 1:
+            print("[-] 操作取消：选择的裁切区域过小或无效。")
+            return
+    else:
+        # 普通模式
+        if not bbox or (bbox[2] - bbox[0]) <= 1 or (bbox[3] - bbox[1]) <= 1:
+            print("[-] 操作取消：选择的区域过小或无效。")
+            return
+        crop_bbox = bbox
+        red_box_bbox = None
 
     # 4. 裁剪并编码选定区域
-    base64_image = crop_and_encode_image(full_screenshot, bbox)
+    base64_image = crop_and_encode_image(full_screenshot, crop_bbox, red_box_bbox)
     if not base64_image:
         return
 
@@ -77,7 +94,10 @@ def handle_task_queue(root):
     try:
         while True:
             task_data = task_queue.get(block=False)
-            if len(task_data) >= 3 and task_data[0] == 'select_region':
+            if len(task_data) >= 4 and task_data[0] == 'select_region':
+                task_type, screenshot_image, config_name, need_red_box = task_data
+                selector = RegionSelector(root, screenshot_image, config_name, need_red_box)
+            elif len(task_data) >= 3 and task_data[0] == 'select_region':
                 task_type, screenshot_image, config_name = task_data
                 selector = RegionSelector(root, screenshot_image, config_name)
             elif len(task_data) == 2 and task_data[0] == 'select_region':
