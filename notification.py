@@ -80,9 +80,8 @@ def show_toast_notification(title, message):
             
             toast.on_activated = on_toast_click
             
-            # 设置过期时间，让toast在指定时间后自动从通知中心移除
-            expiration_time = datetime.datetime.now() + datetime.timedelta(seconds=10)
-            toast.expiration_time = expiration_time
+            # 让toast在被dismiss后从通知中心移除
+            toast.on_dismissed = lambda _: toaster.remove_toast(toast)
             
             # 设置持续时间为短时间显示
             toast.duration = ToastDuration.Short
