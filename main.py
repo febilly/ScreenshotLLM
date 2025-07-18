@@ -43,7 +43,7 @@ def process_hotkey(config):
         bbox = select_region_on_image(full_screenshot, config_name, draw_box)
     except Exception as e:
         print(f"[-] 区域选择失败: {e}")
-        show_notification("错误", f"区域选择失败: {e}", threaded=True)
+        show_notification("错误", f"区域选择失败: {e}")
         return
 
     # 3. 检查选区是否有效
@@ -77,17 +77,17 @@ def process_hotkey(config):
     if result['success']:
         if result['extracted_answer']:
             # 如果提取到答案，显示提取的答案
-            show_notification("AI分析结果 (选定区域)", result['extracted_answer'], duration=1, threaded=True)
+            show_notification("AI分析结果", result['extracted_answer'])
             print("[+] 提取的答案: " + result['extracted_answer'])
             print("[+] 完整回复: " + result['raw_result'])
         else:
             # 如果没有提取到答案，显示完整结果
-            show_notification("AI分析结果 (选定区域)", result['raw_result'], duration=1, threaded=True)
-            print("[+] AI分析结果 (选定区域): " + result['raw_result'])
+            show_notification("AI分析结果", result['raw_result'])
+            print("[+] AI分析结果: " + result['raw_result'])
     else:
         print("[-] 未能获取分析结果。")
         if 'error' in result:
-            show_notification("处理错误", f"图片处理失败: {result['error']}", threaded=True)
+            show_notification("处理错误", f"图片处理失败: {result['error']}")
 
 def handle_task_queue(root):
     """处理队列中的任务"""

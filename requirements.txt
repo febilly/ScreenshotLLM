@@ -3,3 +3,4 @@ requests
 Pillow
 python-dotenv
 win10toast
+windows-toasts

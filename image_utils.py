@@ -18,7 +18,7 @@ def take_screenshot():
         return full_screenshot
     except Exception as e:
         print(f"[-] 截图失败: {e}")
-        show_notification("截图失败", f"无法捕获屏幕: {e}", threaded=True)
+        show_notification("截图失败", f"无法捕获屏幕: {e}")
         return None
 
 def crop_and_encode_image(image_obj, bbox, red_box_bbox=None):
@@ -41,7 +41,7 @@ def crop_and_encode_image(image_obj, bbox, red_box_bbox=None):
             
     except Exception as e:
         print(f"[-] 裁剪或编码失败: {e}")
-        show_notification("错误", f"裁剪或编码失败: {e}", threaded=True)
+        show_notification("错误", f"裁剪或编码失败: {e}")
         return None
 
 def draw_red_box_on_image(image, red_box_bbox):

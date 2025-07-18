@@ -4,15 +4,24 @@
 
 import threading
 import time
+import datetime
 import tkinter as tk
 from tkinter import scrolledtext
-from win10toast import ToastNotifier
 from config import NOTIFICATION_CONFIGS
 
-# 初始化Windows通知工具
-toaster = ToastNotifier()
+# 尝试导入通知库
+try:
+    from windows_toasts import Toast, WindowsToaster, ToastDuration
+    toaster = WindowsToaster('ScreenshotLLM')
+    NOTIFICATION_BACKEND = 'windows_toasts'
+    HAS_TOAST_DURATION = True
+except ImportError:
+    NOTIFICATION_BACKEND = 'popup_only'
+    HAS_TOAST_DURATION = False
 
-def show_notification(title, message, duration=10, threaded=True):
+print(f"[通知] 使用通知后端: {NOTIFICATION_BACKEND}")
+
+def show_notification(title, message):
     """显示Windows桌面通知"""
     try:
         # 考虑中文字符和显示限制的智能检测
@@ -46,30 +55,51 @@ def show_notification(title, message, duration=10, threaded=True):
         if total_display_lines > max_toast_lines:
             needs_popup = True
         
-        # 直接显示通知，不使用队列
+        # 根据后端显示通知
         if needs_popup:
             show_long_message_popup(title, message)
         else:
-            success = False
-            # 尝试多次显示通知，直到成功
-            max_attempts = NOTIFICATION_CONFIGS['max_attempts']
-            retry_delay = NOTIFICATION_CONFIGS['retry_delay']
-            attempt = 0
-            while not success and attempt < max_attempts:
-                success = toaster.show_toast(title, message, duration=duration, threaded=threaded)
-                if not success:
-                    print(f"[Toast] 尝试显示通知失败，等待{retry_delay}秒后重试... (尝试 {attempt + 1}/{max_attempts})")
-                    time.sleep(retry_delay)
-                attempt += 1
-                
-            if success:
-                # 打印成功的通知信息
-                print(f"[Toast] 成功显示通知: {title} - {message}")
-            else:
-                print(f"[Toast] 无法显示通知: {title} - {message}")
+            show_toast_notification(title, message)
         
-    except Exception:
-        print(f"通知显示失败:\n标题: {title}\n内容: {message}")
+    except Exception as e:
+        print(f"通知显示失败:\n标题: {title}\n内容: {message}\n错误: {e}")
+
+def show_toast_notification(title, message):
+    """显示toast通知，根据可用的后端选择实现方式"""
+    if NOTIFICATION_BACKEND == 'windows_toasts':
+        try:
+            # 使用 windows-toasts 显示通知
+            toast = Toast()
+            toast_title = f"{title}（点击展开）"
+            toast.text_fields = [toast_title, message]
+            
+            # 设置点击回调
+            def on_toast_click(_):
+                print(f"[Toast] 用户点击了通知: {title}")
+                show_long_message_popup(title, message)
+            
+            toast.on_activated = on_toast_click
+            
+            # 设置过期时间，让toast在指定时间后自动从通知中心移除
+            expiration_time = datetime.datetime.now() + datetime.timedelta(seconds=10)
+            toast.expiration_time = expiration_time
+            
+            # 设置持续时间为短时间显示
+            toast.duration = ToastDuration.Short
+            
+            # 显示通知
+            toaster.show_toast(toast)
+            print(f"[WindowsToasts] 成功显示通知: {title} - {message}")
+            return True
+            
+        except Exception as e:
+            print(f"[WindowsToasts] 显示通知失败: {e}")
+            return False
+    else:
+        # 如果没有可用的toast库，直接显示弹窗
+        print("[通知] 没有可用的toast库，直接显示弹窗")
+        show_long_message_popup(title, message)
+        return True
 
 def show_long_message_popup(title, message):
     """显示长消息的弹窗"""

@@ -43,9 +43,9 @@ def analyze_image_with_openrouter(base64_image, prompt, model):
         error_message = f"API 请求失败: {e}"
         if hasattr(e, 'response') and e.response is not None:
             error_message += f"\n响应内容: {e.response.text}"
-        show_notification("API 错误", error_message, threaded=True)
+        show_notification("API 错误", error_message)
         return None
     except (KeyError, IndexError) as e:
         print(f"[-] 解析API响应失败: {e}")
-        show_notification("API 错误", f"解析API响应失败，收到的数据格式不正确。", threaded=True)
+        show_notification("API 错误", f"解析API响应失败，收到的数据格式不正确。")
         return None
