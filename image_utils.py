@@ -79,10 +79,25 @@ def draw_red_box_on_image(image, red_box_bbox):
         return image
 
 def extract_answer_from_brackets(text):
-    """从文本中提取方括号[]内的内容作为最终答案"""
-    # 查找方括号内的内容
+    """从文本中提取方括号[]内的内容或LaTeX格式的boxed答案作为最终答案"""
+    # 首先尝试提取LaTeX格式的boxed答案：$\boxed{\text{答案}}$ 或 $\boxed{答案}$
+    latex_patterns = [
+        r'\$\\boxed\{\\text\{([^}]*)\}\}\$',  # $\boxed{\text{答案}}$
+        r'\$\\boxed\{([^}]*)\}\$',           # $\boxed{答案}$
+        r'\\boxed\{\\text\{([^}]*)\}\}',     # \boxed{\text{答案}}
+        r'\\boxed\{([^}]*)\}'                # \boxed{答案}
+    ]
+    
+    for pattern in latex_patterns:
+        matches = re.findall(pattern, text)
+        if matches:
+            # 返回最后一个匹配的内容（通常是最终答案）
+            return matches[-1].strip()
+    
+    # 如果没有找到LaTeX格式，则查找普通方括号内的内容
     matches = re.findall(r'\[([^\]]*)\]', text)
     if matches:
         # 返回最后一个匹配的内容（通常是最终答案）
         return matches[-1].strip()
+    
     return None
