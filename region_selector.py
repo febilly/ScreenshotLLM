@@ -1,5 +1,5 @@
 """
-区域选择模块 - 处理用户在截图上选择矩形区域的功能
+区域选择模块 - 处理用户在截图上选择矩形区域的功能，支持多显示器
 """
 
 import queue
@@ -11,6 +11,37 @@ from PIL import ImageTk
 # 全局队列用于线程间通信
 task_queue = queue.Queue()
 result_queue = queue.Queue()
+
+def get_virtual_screen_geometry():
+    """获取虚拟屏幕的几何信息（包括所有显示器），直接使用系统未缩放的像素值"""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        
+        # 获取虚拟屏幕的尺寸（系统原始像素，与MSS截图库一致）
+        left = user32.GetSystemMetrics(76)    # SM_XVIRTUALSCREEN
+        top = user32.GetSystemMetrics(77)     # SM_YVIRTUALSCREEN  
+        width = user32.GetSystemMetrics(78)   # SM_CXVIRTUALSCREEN
+        height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+        
+        print(f"[*] 虚拟屏幕尺寸: {width}x{height} 位置({left}, {top})")
+        
+        return {
+            'x': left,
+            'y': top, 
+            'width': width,
+            'height': height
+        }
+    except Exception as e:
+        print(f"[-] 获取虚拟屏幕信息失败: {e}")
+        # 回退到主屏幕
+        return {
+            'x': 0,
+            'y': 0,
+            'width': 1920,
+            'height': 1080
+        }  # TODO: 这个默认值可能会出问题
 
 def select_region_on_image(screenshot_image, config_name=None, need_red_box=False):
     """在一个静态的截图上允许用户选择矩形区域 - 使用队列确保在主线程中执行"""
@@ -29,11 +60,19 @@ class RegionSelector:
         self.need_red_box = need_red_box
         self.selection_stage = 1  # 1: 选择裁切区域, 2: 选择红框区域
         self.crop_bbox = None  # 存储第一次选择的裁切区域
+        
+        # 使用截图的实际尺寸来设置窗口，而不是虚拟屏幕几何
+        # 这样确保窗口尺寸与截图完全匹配
+        screenshot_width, screenshot_height = screenshot_image.size
+
         # 将Pillow图像转换为Tkinter可以使用的格式
         self.tk_image = ImageTk.PhotoImage(self.image)
 
         self.top = Toplevel(self.master)
-        self.top.attributes("-fullscreen", True)
+        
+        # 设置窗口大小为截图尺寸，位置从(0,0)开始覆盖所有显示器
+        self.top.geometry(f"{screenshot_width}x{screenshot_height}+0+0")
+        self.top.overrideredirect(True)  # 移除窗口边框
         self.top.attributes("-topmost", True)
         self.top.focus_force()
         self.top.lift()
@@ -62,15 +101,22 @@ class RegionSelector:
             print(f"设置窗口焦点时出错: {e}")
             pass
 
-        # 创建画布，使用原始图像尺寸
-        self.canvas = Canvas(self.top, width=self.image.width, height=self.image.height, cursor="crosshair")
+        # 创建画布，使用截图尺寸
+        self.canvas = Canvas(self.top, 
+                           width=screenshot_width, 
+                           height=screenshot_height, 
+                           cursor="crosshair",
+                           bg='black')  # 设置黑色背景
         self.canvas.pack(fill="both", expand=True)
         
-        # 直接在画布上显示图像，无偏移
+        # 图像直接放在(0,0)位置，无需偏移
         self.image_offset_x = 0
         self.image_offset_y = 0
-        self.canvas_image_id = self.canvas.create_image(0, 0, anchor="nw", image=self.tk_image)
-
+        
+        # 在画布上显示图像
+        self.canvas_image_id = self.canvas.create_image(
+            0, 0, anchor="nw", image=self.tk_image)
+        
         # 在左上角显示配置名称
         title_text = f"模式: {self.config_name}"
         if self.need_red_box:
@@ -201,6 +247,18 @@ class RegionSelector:
             # 使用after_idle确保在主线程中执行
             self.top.update_idletasks()
 
+    def canvas_to_image_coords(self, canvas_x, canvas_y):
+        """将画布坐标转换为图像坐标（现在无需转换）"""
+        return canvas_x, canvas_y
+    
+    def image_to_canvas_coords(self, image_x, image_y):
+        """将图像坐标转换为画布坐标（现在无需转换）"""
+        return image_x, image_y
+    
+    def is_point_in_image(self, canvas_x, canvas_y):
+        """检查画布坐标是否在图像范围内"""
+        return 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height
+
     def on_mouse_motion(self, event):
         """鼠标移动时显示十字瞄准线"""
         if not self.is_selecting:
@@ -210,14 +268,15 @@ class RegionSelector:
             # 检查是否在有效区域内
             if self.selection_stage == 1:
                 # 第一步：整个图像区域都可以显示十字线
-                if 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height:
+                if self.is_point_in_image(canvas_x, canvas_y):
                     self.throttled_update(self.update_crosshair, canvas_x, canvas_y)
                 else:
                     self.clear_crosshair()
             else:
                 # 第二步：只在裁切区域内显示十字线
+                image_x, image_y = self.canvas_to_image_coords(canvas_x, canvas_y)
                 crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
-                if crop_x1 <= canvas_x <= crop_x2 and crop_y1 <= canvas_y <= crop_y2:
+                if crop_x1 <= image_x <= crop_x2 and crop_y1 <= image_y <= crop_y2:
                     self.throttled_update(self.update_crosshair, canvas_x, canvas_y)
                 else:
                     self.clear_crosshair()
@@ -229,60 +288,100 @@ class RegionSelector:
         # 检查点击是否在有效区域内
         if self.selection_stage == 1:
             # 第一步：可以在整个图像区域内选择
-            if 0 <= canvas_x < self.image.width and 0 <= canvas_y < self.image.height:
-                self.start_x = canvas_x
-                self.start_y = canvas_y
+            if self.is_point_in_image(canvas_x, canvas_y):
+                image_x, image_y = self.canvas_to_image_coords(canvas_x, canvas_y)
+                self.start_x = image_x
+                self.start_y = image_y
                 self.is_selecting = True
                 
                 # 清除十字线
                 self.clear_crosshair()
                 
-                # 立即显示初始选择框
-                self.update_selection_rect(self.start_x, self.start_y, canvas_x, canvas_y)
+                # 立即显示初始选择框（使用画布坐标）
+                self.update_selection_rect(canvas_x, canvas_y, canvas_x, canvas_y)
         else:
             # 第二步：只能在裁切区域内选择
+            image_x, image_y = self.canvas_to_image_coords(canvas_x, canvas_y)
             crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
-            if crop_x1 <= canvas_x <= crop_x2 and crop_y1 <= canvas_y <= crop_y2:
-                self.start_x = canvas_x
-                self.start_y = canvas_y
+            if crop_x1 <= image_x <= crop_x2 and crop_y1 <= image_y <= crop_y2:
+                # 坐标相对于裁切区域
+                self.start_x = image_x - crop_x1
+                self.start_y = image_y - crop_y1
                 self.is_selecting = True
                 
                 # 清除十字线
                 self.clear_crosshair()
                 
-                # 立即显示初始选择框
-                self.update_selection_rect(self.start_x, self.start_y, canvas_x, canvas_y)
+                # 立即显示初始选择框（使用画布坐标）
+                self.update_selection_rect(canvas_x, canvas_y, canvas_x, canvas_y)
 
     def on_mouse_move(self, event):
         if self.is_selecting and self.start_x is not None and self.start_y is not None:
             canvas_x = self.canvas.canvasx(event.x)
             canvas_y = self.canvas.canvasy(event.y)
             
+            # 将起始点转换为画布坐标
+            if self.selection_stage == 1:
+                start_canvas_x, start_canvas_y = self.image_to_canvas_coords(self.start_x, self.start_y)
+            else:
+                # 第二步时，起始点是相对于裁切区域的
+                crop_x1, crop_y1, _, _ = self.crop_bbox
+                abs_start_x = crop_x1 + self.start_x
+                abs_start_y = crop_y1 + self.start_y
+                start_canvas_x, start_canvas_y = self.image_to_canvas_coords(abs_start_x, abs_start_y)
+            
             # 使用节流更新来提高性能
-            self.throttled_update(self.update_selection_rect, self.start_x, self.start_y, canvas_x, canvas_y)
+            self.throttled_update(self.update_selection_rect, start_canvas_x, start_canvas_y, canvas_x, canvas_y)
 
     def on_mouse_up(self, event):
         if self.is_selecting and self.start_x is not None and self.start_y is not None:
             canvas_x = self.canvas.canvasx(event.x)
             canvas_y = self.canvas.canvasy(event.y)
             
-            # 限制坐标在图像范围内
-            end_x = max(0, min(self.image.width, canvas_x))
-            end_y = max(0, min(self.image.height, canvas_y))
-            start_x = max(0, min(self.image.width, self.start_x))
-            start_y = max(0, min(self.image.height, self.start_y))
-            
-            # 计算最终选择区域坐标（无需偏移转换）
-            x1 = int(min(start_x, end_x))
-            y1 = int(min(start_y, end_y))
-            x2 = int(max(start_x, end_x))
-            y2 = int(max(start_y, end_y))
-            
-            # 确保坐标在有效范围内
-            x1 = max(0, min(self.image.width, x1))
-            y1 = max(0, min(self.image.height, y1))
-            x2 = max(0, min(self.image.width, x2))
-            y2 = max(0, min(self.image.height, y2))
+            if self.selection_stage == 1:
+                # 第一步：转换画布坐标到图像坐标
+                end_image_x, end_image_y = self.canvas_to_image_coords(canvas_x, canvas_y)
+                
+                # 限制坐标在图像范围内
+                end_x = max(0, min(self.image.width, end_image_x))
+                end_y = max(0, min(self.image.height, end_image_y))
+                start_x = max(0, min(self.image.width, self.start_x))
+                start_y = max(0, min(self.image.height, self.start_y))
+                
+                # 计算最终选择区域坐标
+                x1 = int(min(start_x, end_x))
+                y1 = int(min(start_y, end_y))
+                x2 = int(max(start_x, end_x))
+                y2 = int(max(start_y, end_y))
+                
+                # 确保坐标在有效范围内
+                x1 = max(0, min(self.image.width, x1))
+                y1 = max(0, min(self.image.height, y1))
+                x2 = max(0, min(self.image.width, x2))
+                y2 = max(0, min(self.image.height, y2))
+                
+            else:
+                # 第二步：相对坐标已经在start_x, start_y中
+                crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
+                current_image_x, current_image_y = self.canvas_to_image_coords(canvas_x, canvas_y)
+                end_rel_x = current_image_x - crop_x1
+                end_rel_y = current_image_y - crop_y1
+                
+                # 计算裁切区域的尺寸
+                crop_width = crop_x2 - crop_x1
+                crop_height = crop_y2 - crop_y1
+                
+                # 限制坐标在裁切区域内
+                end_x = max(0, min(crop_width, end_rel_x))
+                end_y = max(0, min(crop_height, end_rel_y))
+                start_x = max(0, min(crop_width, self.start_x))
+                start_y = max(0, min(crop_height, self.start_y))
+                
+                # 计算最终选择区域坐标
+                x1 = int(min(start_x, end_x))
+                y1 = int(min(start_y, end_y))
+                x2 = int(max(start_x, end_x))
+                y2 = int(max(start_y, end_y))
             
             # 处理两步选择逻辑
             if self.selection_stage == 1 and self.need_red_box:
@@ -309,21 +408,13 @@ class RegionSelector:
             else:
                 # 最后一步：完成选择
                 if self.need_red_box and self.selection_stage == 2:
-                    # 将红框坐标转换为相对于裁切区域的坐标
-                    crop_x1, crop_y1, crop_x2, crop_y2 = self.crop_bbox
-                    red_box_x1 = x1 - crop_x1
-                    red_box_y1 = y1 - crop_y1
-                    red_box_x2 = x2 - crop_x1
-                    red_box_y2 = y2 - crop_y1
-                    
-                    # 确保红框坐标在裁切区域范围内
-                    crop_width = crop_x2 - crop_x1
-                    crop_height = crop_y2 - crop_y1
-                    red_box_x1 = max(0, min(crop_width, red_box_x1))
-                    red_box_y1 = max(0, min(crop_height, red_box_y1))
-                    red_box_x2 = max(0, min(crop_width, red_box_x2))
-                    red_box_y2 = max(0, min(crop_height, red_box_y2))
-                    
+                    # 在第二步中，x1,y1,x2,y2已经是相对于裁切区域的坐标
+                    # 不需要再次转换，直接使用即可
+                    red_box_x1 = x1
+                    red_box_y1 = y1
+                    red_box_x2 = x2
+                    red_box_y2 = y2
+                                        
                     # 返回裁切区域和红框区域的坐标
                     self.selection = {
                         'crop_bbox': self.crop_bbox,

@@ -43,9 +43,25 @@ HOTKEY_CONFIGS = {
     },
 }
 
+# 显示器管理快捷键配置
+MONITOR_HOTKEY_CONFIGS = {
+    # 显示当前显示器信息
+    'ctrl+shift+i': {
+        'name': "显示器信息",
+        'action': "show_monitor_info"
+    }
+}
+
 # API 配置
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+# 显示器配置
+MONITOR_CONFIGS = {
+    'auto_detect': True,        # 自动检测所有显示器
+    'capture_all': True,        # 自动截取包含所有显示器的虚拟桌面
+    'show_monitor_info': False,  # 启动时显示显示器信息
+}
 
 # 通知配置
 NOTIFICATION_CONFIGS = {
