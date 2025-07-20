@@ -60,7 +60,7 @@ MONITOR_CONFIGS = {
 
 # 通知配置
 NOTIFICATION_CONFIGS = {
-    'max_toast_chars': 100,  # 中文字符限制更严格
+    'max_toast_chars': 50,  # 中文字符限制更严格
     'max_toast_lines': 4,    # 行数限制
     'max_line_length': 25,   # 单行字符限制
     'max_attempts': 20,      # 最大重试次数
