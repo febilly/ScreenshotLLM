@@ -272,3 +272,180 @@ def show_long_message_popup(title, message):
     # 在新线程中创建弹窗，避免阻塞主程序
     popup_thread = threading.Thread(target=create_popup, daemon=True)
     popup_thread.start()
+
+def show_notification_stream(title, content_iter):
+    """流式显示通知，content_iter为内容生成器/迭代器"""
+    def create_stream_popup():
+        # 创建主弹窗
+        popup = tk.Tk()
+        popup.title(title)
+        popup.resizable(True, True)
+        popup.geometry("700x500")
+
+        # 设置窗口图标（可选）
+        try:
+            popup.iconbitmap(default=None)
+        except:
+            pass
+
+        # 创建文本框架
+        frame = tk.Frame(popup)
+        frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+
+        # 创建可滚动的文本区域
+        text_area = scrolledtext.ScrolledText(
+            frame,
+            wrap=tk.WORD,
+            width=80,
+            height=25,
+            font=("微软雅黑", 11),
+            bg="#ffffff",
+            fg="#333333",
+            selectbackground="#0078d4",
+            selectforeground="white",
+            relief="solid",
+            borderwidth=1
+        )
+        text_area.pack(fill=tk.BOTH, expand=True)
+        text_area.insert(tk.END, "(AI正在生成...)")
+        text_area.config(state=tk.DISABLED)
+
+        # 按钮区域
+        button_frame = tk.Frame(popup)
+        button_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+
+        # 复制到剪贴板按钮
+        def copy_to_clipboard():
+            popup.clipboard_clear()
+            popup.clipboard_append(text_area.get("1.0", tk.END).strip())
+            copy_btn.config(text="✓ 已复制!", state=tk.DISABLED, bg="#28a745", fg="white")
+            popup.after(2000, lambda: copy_btn.config(
+                text="📋 复制到剪贴板",
+                state=tk.NORMAL,
+                bg="#f8f9fa",
+                fg="#333333"
+            ))
+
+        copy_btn = tk.Button(
+            button_frame,
+            text="📋 复制到剪贴板",
+            command=copy_to_clipboard,
+            font=("微软雅黑", 10),
+            bg="#f8f9fa",
+            fg="#333333",
+            relief="solid",
+            borderwidth=1,
+            padx=15,
+            pady=8
+        )
+        copy_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+        # 关闭按钮
+        close_btn = tk.Button(
+            button_frame,
+            text="❌ 关闭",
+            command=popup.destroy,
+            font=("微软雅黑", 10),
+            bg="#dc3545",
+            fg="white",
+            relief="solid",
+            borderwidth=1,
+            padx=15,
+            pady=8
+        )
+        close_btn.pack(side=tk.RIGHT)
+
+        # 居中显示窗口
+        popup.update_idletasks()
+        screen_width = popup.winfo_screenwidth()
+        screen_height = popup.winfo_screenheight()
+        window_width = popup.winfo_reqwidth()
+        window_height = popup.winfo_reqheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        popup.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        popup.update()
+
+        # 强制窗口置顶和聚焦
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+            user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+            user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+            user32.AttachThreadInput.restype = wintypes.BOOL
+            hwnd = popup.winfo_id()
+            user32.ReleaseCapture()
+            user32.ClipCursor(None)
+            current_thread = kernel32.GetCurrentThreadId()
+            foreground_hwnd = user32.GetForegroundWindow()
+            if foreground_hwnd:
+                process_id = wintypes.DWORD()
+                foreground_thread = user32.GetWindowThreadProcessId(foreground_hwnd, ctypes.byref(process_id))
+                if foreground_thread:
+                    user32.AttachThreadInput(current_thread, foreground_thread, True)
+            popup.attributes("-topmost", True)
+            popup.lift()
+            popup.focus_force()
+            user32.ShowWindow(hwnd, 9)
+            user32.SetForegroundWindow(hwnd)
+            user32.SetActiveWindow(hwnd)
+            user32.SetFocus(hwnd)
+            user32.BringWindowToTop(hwnd)
+            if foreground_hwnd and foreground_thread:
+                user32.AttachThreadInput(current_thread, foreground_thread, False)
+        except Exception as e:
+            print(f"设置窗口焦点时出错: {e}")
+
+        # 支持ESC关闭
+        popup.bind('<Escape>', lambda e: popup.destroy())
+
+        # 多次尝试获得焦点，确保成功
+        def ensure_focus():
+            try:
+                popup.attributes("-topmost", True)
+                popup.lift()
+                popup.focus_force()
+            except:
+                pass
+        popup.after(50, ensure_focus)
+        popup.after(100, ensure_focus)
+
+        # 流式内容刷新逻辑
+        def update_content():
+            last_content = ""
+            first_chunk = True
+            for content in content_iter:
+                if content is None:
+                    break
+
+                # 收到第一个有效数据块时，清空初始提示
+                if first_chunk and content:
+                    text_area.config(state=tk.NORMAL)
+                    text_area.delete("1.0", tk.END)
+                    text_area.config(state=tk.DISABLED)
+                    first_chunk = False
+
+                if content != last_content:
+                    text_area.config(state=tk.NORMAL)
+                    
+                    # 智能更新逻辑：处理内容跳变（如提取答案时）
+                    if content.startswith(last_content):
+                        # 增量更新：只追加新内容，避免闪烁
+                        delta = content[len(last_content):]
+                        text_area.insert(tk.END, delta)
+                    else:
+                        # 内容跳变：完全重写文本框
+                        text_area.delete("1.0", tk.END)
+                        text_area.insert(tk.END, content)
+
+                    text_area.see(tk.END)  # 自动滚动到末尾
+                    text_area.config(state=tk.DISABLED)
+                    last_content = content
+
+        threading.Thread(target=update_content, daemon=True).start()
+        popup.mainloop()
+    popup_thread = threading.Thread(target=create_stream_popup, daemon=True)
+    popup_thread.start()

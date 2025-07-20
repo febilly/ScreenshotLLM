@@ -17,7 +17,7 @@ except:
 
 # 导入自定义模块
 from config import HOTKEY_CONFIGS, OPENROUTER_API_KEY
-from notification import show_notification
+from notification import show_notification, show_notification_stream
 from region_selector import RegionSelector, task_queue, result_queue
 from image_utils import take_screenshot, crop_and_encode_image
 from image_processor import process_image
@@ -78,23 +78,32 @@ def process_hotkey(config):
         return
 
     # 5. 调用核心处理器分析图片
-    result = process_image(base64_image, config['prompt'], config['model'])
-
-    # 6. 显示结果
-    if result['success']:
-        if result['extracted_answer']:
-            # 如果提取到答案，显示提取的答案
-            show_notification("AI分析结果", result['extracted_answer'])
-            print("[+] 提取的答案: " + result['extracted_answer'])
-            print("[+] 完整回复: " + result['raw_result'])
-        else:
-            # 如果没有提取到答案，显示完整结果
-            show_notification("AI分析结果", result['raw_result'])
-            print("[+] AI分析结果: " + result['raw_result'])
+    if config.get('stream', False):
+        # 流式模式
+        def content_iter():
+            for result in process_image(base64_image, config['prompt'], config['model'], stream=True):
+                if not result or not result.get('success'):
+                    yield "(AI分析失败)"
+                    break
+                # 优先显示提取答案，否则显示全部
+                content = result['extracted_answer'] if result['extracted_answer'] else result['raw_result']
+                yield content
+        show_notification_stream("AI分析结果", content_iter())
     else:
-        print("[-] 未能获取分析结果。")
-        if 'error' in result:
-            show_notification("处理错误", f"图片处理失败: {result['error']}")
+        # 非流式
+        result = process_image(base64_image, config['prompt'], config['model'], stream=False)
+        if result['success']:
+            if result['extracted_answer']:
+                show_notification("AI分析结果", result['extracted_answer'])
+                print("[+] 提取的答案: " + result['extracted_answer'])
+                print("[+] 完整回复: " + result['raw_result'])
+            else:
+                show_notification("AI分析结果", result['raw_result'])
+                print("[+] AI分析结果: " + result['raw_result'])
+        else:
+            print("[-] 未能获取分析结果。")
+            if 'error' in result:
+                show_notification("处理错误", f"图片处理失败: {result['error']}")
 
 def handle_task_queue(root):
     """处理队列中的任务"""
