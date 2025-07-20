@@ -16,25 +16,12 @@ except:
     pass
 
 # 导入自定义模块
-from config import HOTKEY_CONFIGS, MONITOR_HOTKEY_CONFIGS, OPENROUTER_API_KEY
+from config import HOTKEY_CONFIGS, OPENROUTER_API_KEY
 from notification import show_notification
 from region_selector import RegionSelector, task_queue, result_queue
 from image_utils import take_screenshot, crop_and_encode_image
 from image_processor import process_image
-from monitor_utils import get_monitor_info
-
-def handle_monitor_hotkey(config):
-    """处理显示器相关的快捷键"""
-    action = config.get('action')
-    config_name = config.get('name', '未知操作')
-    
-    print(f"\n[*] 检测到显示器快捷键: {config_name}")
-    
-    if action == 'show_monitor_info':
-        info = get_monitor_info()
-        message = f"检测到 {info['count']} 个显示器\n程序会自动截取所有显示器的内容\n您可以直接在任意显示器上选择区域"
-        show_notification("显示器信息", message)
-        print(f"[*] 显示器信息: 共检测到{info['count']}个显示器，程序将自动截取所有显示器")
+from monitor_utils import take_screenshot_multi_monitor
 
 def process_hotkey(config):
     """处理单个快捷键触发的完整流程"""
@@ -159,12 +146,6 @@ def main():
         config_name = config.get('name', '未知模式')
         print(f"  - {hotkey}: {config_name} (模型: {config['model']})")
         keyboard.add_hotkey(hotkey, lambda data=config: threading.Thread(target=process_hotkey, args=(data,)).start())
-
-    # 注册显示器管理快捷键
-    for hotkey, config in MONITOR_HOTKEY_CONFIGS.items():
-        config_name = config.get('name', '未知操作')
-        print(f"  - {hotkey}: {config_name}")
-        keyboard.add_hotkey(hotkey, lambda data=config: threading.Thread(target=handle_monitor_hotkey, args=(data,)).start())
 
     print("\n脚本正在后台运行。您可以使用设定的快捷键进行截图和分析。")
     print("要停止脚本，请关闭此窗口或按 Ctrl+C。")

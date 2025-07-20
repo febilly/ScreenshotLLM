@@ -43,15 +43,6 @@ HOTKEY_CONFIGS = {
     },
 }
 
-# 显示器管理快捷键配置
-MONITOR_HOTKEY_CONFIGS = {
-    # 显示当前显示器信息
-    'ctrl+shift+i': {
-        'name': "显示器信息",
-        'action': "show_monitor_info"
-    }
-}
-
 # API 配置
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
