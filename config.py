@@ -66,3 +66,16 @@ NOTIFICATION_CONFIGS = {
     'max_attempts': 20,      # 最大重试次数
     'retry_delay': 0.5       # 重试间隔（秒）
 }
+
+# 弹窗窗口配置
+POPUP_CONFIGS = {
+    'width': 600,                    # 弹窗宽度
+    'height': 500,                   # 弹窗高度
+    'font_family': "微软雅黑",        # 字体系列
+    'font_size': 11,                 # 字体大小
+    'button_font_size': 10,          # 按钮字体大小
+    'window_padding': 15,            # 窗口内边距
+    'button_padding_x': 15,          # 按钮水平内边距
+    'button_padding_y': 8,           # 按钮垂直内边距
+    'resizable': True,               # 是否允许调整窗口大小
+}

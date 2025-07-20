@@ -101,22 +101,3 @@ def process_image_stream(base64_image, prompt, model):
             'final_answer': None,
             'error': str(e)
         }
-
-def process_image(base64_image, prompt, model, stream=False):
-    """
-    处理已编码的图片 - 兼容性包装函数
-    
-    参数：
-    - base64_image: base64编码的图片数据
-    - prompt: 提示词
-    - model: 使用的模型
-    - stream: 是否流式返回
-    
-    返回：
-    - 非流式: dict
-    - 流式: generator
-    """
-    if stream:
-        return process_image_stream(base64_image, prompt, model)
-    else:
-        return process_image_sync(base64_image, prompt, model)

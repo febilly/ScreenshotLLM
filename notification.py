@@ -7,7 +7,7 @@ import time
 import datetime
 import tkinter as tk
 from tkinter import scrolledtext
-from config import NOTIFICATION_CONFIGS
+from config import NOTIFICATION_CONFIGS, POPUP_CONFIGS
 
 # 尝试导入通知库
 try:
@@ -100,172 +100,136 @@ def show_toast_notification(title, message):
         show_long_message_popup(title, message)
         return True
 
+def _create_popup_base(title):
+    """创建弹窗基础结构，返回弹窗组件"""
+    popup = tk.Tk()
+    popup.title(title)
+    popup.resizable(POPUP_CONFIGS['resizable'], POPUP_CONFIGS['resizable'])
+    popup.geometry(f"{POPUP_CONFIGS['width']}x{POPUP_CONFIGS['height']}")
+    
+    # 设置窗口图标（可选）
+    try:
+        popup.iconbitmap(default=None)
+    except:
+        pass
+    
+    # 创建文本框架
+    frame = tk.Frame(popup)
+    frame.pack(fill=tk.BOTH, expand=True, 
+               padx=POPUP_CONFIGS['window_padding'], 
+               pady=POPUP_CONFIGS['window_padding'])
+    
+    # 先创建按钮框架（底部固定）
+    button_frame = tk.Frame(frame)
+    button_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+    
+    # 创建可滚动的文本区域（占据剩余空间）
+    text_area = scrolledtext.ScrolledText(
+        frame,
+        wrap=tk.WORD,
+        font=(POPUP_CONFIGS['font_family'], POPUP_CONFIGS['font_size']),
+        bg="#ffffff",
+        fg="#333333",
+        selectbackground="#0078d4",
+        selectforeground="white",
+        relief="solid",
+        borderwidth=1
+    )
+    text_area.pack(fill=tk.BOTH, expand=True)
+    
+    return popup, text_area, button_frame
+
+def _create_popup_buttons(button_frame, popup, copy_content_func):
+    """创建弹窗按钮"""
+    # 复制到剪贴板按钮
+    def copy_to_clipboard():
+        popup.clipboard_clear()
+        popup.clipboard_append(copy_content_func())
+        copy_btn.config(text="✓ 已复制!", state=tk.DISABLED, bg="#28a745", fg="white")
+        popup.after(2000, lambda: copy_btn.config(
+            text="📋 复制到剪贴板",
+            state=tk.NORMAL,
+            bg="#f8f9fa",
+            fg="#333333"
+        ))
+    
+    copy_btn = tk.Button(
+        button_frame,
+        text="📋 复制到剪贴板",
+        command=copy_to_clipboard,
+        font=(POPUP_CONFIGS['font_family'], POPUP_CONFIGS['button_font_size']),
+        bg="#f8f9fa",
+        fg="#333333",
+        relief="solid",
+        borderwidth=1,
+        padx=POPUP_CONFIGS['button_padding_x'],
+        pady=POPUP_CONFIGS['button_padding_y']
+    )
+    copy_btn.pack(side=tk.LEFT, padx=(0, 10))
+    
+    # 关闭按钮
+    close_btn = tk.Button(
+        button_frame,
+        text="❌ 关闭",
+        command=popup.destroy,
+        font=(POPUP_CONFIGS['font_family'], POPUP_CONFIGS['button_font_size']),
+        bg="#dc3545",
+        fg="white",
+        relief="solid",
+        borderwidth=1,
+        padx=POPUP_CONFIGS['button_padding_x'],
+        pady=POPUP_CONFIGS['button_padding_y']
+    )
+    close_btn.pack(side=tk.RIGHT)
+
+def _setup_popup_display(popup, title):
+    """设置弹窗显示位置和焦点"""
+    # 居中显示窗口
+    popup.update_idletasks()
+    screen_width = popup.winfo_screenwidth()
+    screen_height = popup.winfo_screenheight()
+    window_width = POPUP_CONFIGS['width']
+    window_height = POPUP_CONFIGS['height']
+    x = (screen_width - window_width) // 2
+    y = (screen_height - window_height) // 2
+    popup.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    popup.update()
+    
+    # 简化的焦点设置逻辑
+    try:
+        popup.attributes("-topmost", True)
+        popup.lift()
+        popup.focus_force()
+        print(f"[弹窗] 弹窗 '{title}' 已显示")
+    except Exception as e:
+        print(f"设置窗口焦点时出错: {e}")
+    
+    # 设置键盘事件
+    popup.bind('<Escape>', lambda e: popup.destroy())
+    
+    # 简化焦点确保逻辑
+    def ensure_focus():
+        try:
+            popup.attributes("-topmost", False)  # 取消置顶，避免干扰用户
+            popup.lift()
+        except:
+            pass
+    popup.after(100, ensure_focus)
+
 def show_long_message_popup(title, message):
     """显示长消息的弹窗"""
     def create_popup():
-        # 创建弹窗
-        popup = tk.Tk()
-        popup.title(title)
-        popup.resizable(True, True)  # 允许调整大小
-        
-        # 先设置初始大小但不显示位置
-        popup.geometry("700x500")
-        
-        # 设置窗口图标（如果需要）
-        try:
-            popup.iconbitmap(default=None)
-        except:
-            pass
-        
-        # 创建文本框架
-        frame = tk.Frame(popup)
-        frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
-        # 创建可滚动的文本区域
-        text_area = scrolledtext.ScrolledText(
-            frame, 
-            wrap=tk.WORD, 
-            width=80, 
-            height=25,
-            font=("微软雅黑", 11),
-            bg="#ffffff",
-            fg="#333333",
-            selectbackground="#0078d4",
-            selectforeground="white",
-            relief="solid",
-            borderwidth=1
-        )
-        text_area.pack(fill=tk.BOTH, expand=True)
+        popup, text_area, button_frame = _create_popup_base(title)
         
         # 插入消息内容
         text_area.insert(tk.END, message)
         text_area.config(state=tk.DISABLED)  # 设为只读
         
-        # 创建按钮框架
-        button_frame = tk.Frame(popup)
-        button_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+        # 创建按钮
+        _create_popup_buttons(button_frame, popup, lambda: message)
         
-        # 复制到剪贴板按钮
-        def copy_to_clipboard():
-            popup.clipboard_clear()
-            popup.clipboard_append(message)
-            copy_btn.config(text="✓ 已复制!", state=tk.DISABLED, bg="#28a745", fg="white")
-            popup.after(2000, lambda: copy_btn.config(
-                text="📋 复制到剪贴板", 
-                state=tk.NORMAL, 
-                bg="#f8f9fa", 
-                fg="#333333"
-            ))
-        
-        copy_btn = tk.Button(
-            button_frame, 
-            text="📋 复制到剪贴板", 
-            command=copy_to_clipboard,
-            font=("微软雅黑", 10),
-            bg="#f8f9fa",
-            fg="#333333",
-            relief="solid",
-            borderwidth=1,
-            padx=15,
-            pady=8
-        )
-        copy_btn.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # 关闭按钮
-        close_btn = tk.Button(
-            button_frame, 
-            text="❌ 关闭", 
-            command=popup.destroy,
-            font=("微软雅黑", 10),
-            bg="#dc3545",
-            fg="white",
-            relief="solid",
-            borderwidth=1,
-            padx=15,
-            pady=8
-        )
-        close_btn.pack(side=tk.RIGHT)
-        
-        # 计算屏幕居中位置
-        popup.update_idletasks()  # 确保窗口尺寸计算完毕
-        screen_width = popup.winfo_screenwidth()
-        screen_height = popup.winfo_screenheight()
-        window_width = popup.winfo_reqwidth()
-        window_height = popup.winfo_reqheight()
-        
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        
-        # 设置窗口位置并显示
-        popup.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        
-        # 强制抢夺鼠标和键盘焦点 - 在窗口完全创建后执行
-        popup.update()  # 确保窗口完全显示
-        
-        try:
-            import ctypes
-            from ctypes import wintypes
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            
-            # 定义函数参数类型以避免类型错误
-            user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-            user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-            user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-            user32.AttachThreadInput.restype = wintypes.BOOL
-            
-            # 获取当前窗口句柄
-            hwnd = popup.winfo_id()
-            
-            # 释放任何现有的鼠标捕获
-            user32.ReleaseCapture()
-            
-            # 解除鼠标区域限制
-            user32.ClipCursor(None)
-            
-            # 获取当前前台窗口的线程ID
-            current_thread = kernel32.GetCurrentThreadId()
-            foreground_hwnd = user32.GetForegroundWindow()
-            if foreground_hwnd:
-                process_id = wintypes.DWORD()
-                foreground_thread = user32.GetWindowThreadProcessId(foreground_hwnd, ctypes.byref(process_id))
-                # 附加到前台窗口的线程
-                if foreground_thread:
-                    user32.AttachThreadInput(current_thread, foreground_thread, True)
-            
-            # 设置窗口属性
-            popup.attributes("-topmost", True)
-            popup.lift()
-            popup.focus_force()
-            
-            # 强制设置为前台窗口
-            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-            user32.SetForegroundWindow(hwnd)
-            user32.SetActiveWindow(hwnd)
-            user32.SetFocus(hwnd)
-            user32.BringWindowToTop(hwnd)
-            
-            # 分离线程
-            if foreground_hwnd and foreground_thread:
-                user32.AttachThreadInput(current_thread, foreground_thread, False)
-                
-        except Exception as e:
-            print(f"设置窗口焦点时出错: {e}")
-        
-        # 设置键盘事件
-        popup.bind('<Escape>', lambda e: popup.destroy())
-        
-        # 多次尝试获得焦点，确保成功
-        def ensure_focus():
-            try:
-                popup.attributes("-topmost", True)
-                popup.lift()
-                popup.focus_force()
-            except:
-                pass
-        
-        popup.after(50, ensure_focus)
-        popup.after(100, ensure_focus)
+        # 设置显示位置和焦点
+        _setup_popup_display(popup, title)
         
         popup.mainloop()
     
@@ -276,142 +240,17 @@ def show_long_message_popup(title, message):
 def show_notification_stream(title, content_iter):
     """流式显示通知，content_iter为内容生成器/迭代器"""
     def create_stream_popup():
-        # 创建主弹窗
-        popup = tk.Tk()
-        popup.title(title)
-        popup.resizable(True, True)
-        popup.geometry("700x500")
-
-        # 设置窗口图标（可选）
-        try:
-            popup.iconbitmap(default=None)
-        except:
-            pass
-
-        # 创建文本框架
-        frame = tk.Frame(popup)
-        frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-        # 创建可滚动的文本区域
-        text_area = scrolledtext.ScrolledText(
-            frame,
-            wrap=tk.WORD,
-            width=80,
-            height=25,
-            font=("微软雅黑", 11),
-            bg="#ffffff",
-            fg="#333333",
-            selectbackground="#0078d4",
-            selectforeground="white",
-            relief="solid",
-            borderwidth=1
-        )
-        text_area.pack(fill=tk.BOTH, expand=True)
+        popup, text_area, button_frame = _create_popup_base(title)
+        
+        # 初始显示提示
         text_area.insert(tk.END, "(AI正在生成...)")
         text_area.config(state=tk.DISABLED)
 
-        # 按钮区域
-        button_frame = tk.Frame(popup)
-        button_frame.pack(fill=tk.X, padx=15, pady=(0, 15))
+        # 创建按钮
+        _create_popup_buttons(button_frame, popup, lambda: text_area.get("1.0", tk.END).strip())
 
-        # 复制到剪贴板按钮
-        def copy_to_clipboard():
-            popup.clipboard_clear()
-            popup.clipboard_append(text_area.get("1.0", tk.END).strip())
-            copy_btn.config(text="✓ 已复制!", state=tk.DISABLED, bg="#28a745", fg="white")
-            popup.after(2000, lambda: copy_btn.config(
-                text="📋 复制到剪贴板",
-                state=tk.NORMAL,
-                bg="#f8f9fa",
-                fg="#333333"
-            ))
-
-        copy_btn = tk.Button(
-            button_frame,
-            text="📋 复制到剪贴板",
-            command=copy_to_clipboard,
-            font=("微软雅黑", 10),
-            bg="#f8f9fa",
-            fg="#333333",
-            relief="solid",
-            borderwidth=1,
-            padx=15,
-            pady=8
-        )
-        copy_btn.pack(side=tk.LEFT, padx=(0, 10))
-
-        # 关闭按钮
-        close_btn = tk.Button(
-            button_frame,
-            text="❌ 关闭",
-            command=popup.destroy,
-            font=("微软雅黑", 10),
-            bg="#dc3545",
-            fg="white",
-            relief="solid",
-            borderwidth=1,
-            padx=15,
-            pady=8
-        )
-        close_btn.pack(side=tk.RIGHT)
-
-        # 居中显示窗口
-        popup.update_idletasks()
-        screen_width = popup.winfo_screenwidth()
-        screen_height = popup.winfo_screenheight()
-        window_width = popup.winfo_reqwidth()
-        window_height = popup.winfo_reqheight()
-        x = (screen_width - window_width) // 2
-        y = (screen_height - window_height) // 2
-        popup.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        popup.update()
-
-        # 强制窗口置顶和聚焦
-        try:
-            import ctypes
-            from ctypes import wintypes
-            user32 = ctypes.windll.user32
-            kernel32 = ctypes.windll.kernel32
-            user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-            user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-            user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-            user32.AttachThreadInput.restype = wintypes.BOOL
-            hwnd = popup.winfo_id()
-            user32.ReleaseCapture()
-            user32.ClipCursor(None)
-            current_thread = kernel32.GetCurrentThreadId()
-            foreground_hwnd = user32.GetForegroundWindow()
-            if foreground_hwnd:
-                process_id = wintypes.DWORD()
-                foreground_thread = user32.GetWindowThreadProcessId(foreground_hwnd, ctypes.byref(process_id))
-                if foreground_thread:
-                    user32.AttachThreadInput(current_thread, foreground_thread, True)
-            popup.attributes("-topmost", True)
-            popup.lift()
-            popup.focus_force()
-            user32.ShowWindow(hwnd, 9)
-            user32.SetForegroundWindow(hwnd)
-            user32.SetActiveWindow(hwnd)
-            user32.SetFocus(hwnd)
-            user32.BringWindowToTop(hwnd)
-            if foreground_hwnd and foreground_thread:
-                user32.AttachThreadInput(current_thread, foreground_thread, False)
-        except Exception as e:
-            print(f"设置窗口焦点时出错: {e}")
-
-        # 支持ESC关闭
-        popup.bind('<Escape>', lambda e: popup.destroy())
-
-        # 多次尝试获得焦点，确保成功
-        def ensure_focus():
-            try:
-                popup.attributes("-topmost", True)
-                popup.lift()
-                popup.focus_force()
-            except:
-                pass
-        popup.after(50, ensure_focus)
-        popup.after(100, ensure_focus)
+        # 设置显示位置和焦点
+        _setup_popup_display(popup, title)
 
         # 流式内容刷新逻辑
         def update_content():

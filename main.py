@@ -20,8 +20,22 @@ from config import HOTKEY_CONFIGS, OPENROUTER_API_KEY
 from notification import show_notification, show_notification_stream
 from region_selector import RegionSelector, task_queue, result_queue
 from image_utils import take_screenshot, crop_and_encode_image
-from image_processor import process_image
+from image_processor import process_image_sync, process_image_stream
 from monitor_utils import take_screenshot_multi_monitor
+
+def print_analysis_result(result):
+    """打印分析结果到命令行"""
+    if result and result.get('success'):
+        print("[+] 分析完成!")
+        if result['extracted_answer']:
+            print("[+] 提取的答案: " + result['extracted_answer'])
+            print("[+] 完整回复: " + result['raw_result'])
+        else:
+            print("[+] AI分析结果: " + result['raw_result'])
+    else:
+        print("[-] 未能获取分析结果。")
+        if result and 'error' in result:
+            print(f"[-] 错误: {result['error']}")
 
 def process_hotkey(config):
     """处理单个快捷键触发的完整流程"""
@@ -80,30 +94,49 @@ def process_hotkey(config):
     # 5. 调用核心处理器分析图片
     if config.get('stream', False):
         # 流式模式
+        import threading
+        import queue
+        
+        # 用于存储最终结果和同步完成状态
+        final_result = None
+        completion_event = threading.Event()
+        
         def content_iter():
-            for result in process_image(base64_image, config['prompt'], config['model'], stream=True):
+            nonlocal final_result
+            for result in process_image_stream(base64_image, config['prompt'], config['model']):
                 if not result or not result.get('success'):
+                    final_result = result  # 保存失败结果
                     yield "(AI分析失败)"
                     break
                 # 优先显示提取答案，否则显示全部
                 content = result['extracted_answer'] if result['extracted_answer'] else result['raw_result']
+                final_result = result  # 保存最终结果
                 yield content
+            # 流式处理完成，设置事件
+            completion_event.set()
+        
+        # 启动流式弹窗（异步）
         show_notification_stream("AI分析结果", content_iter())
+        
+        # 等待流式处理完成
+        completion_event.wait()
+        
+        # 流式处理完成后，输出命令行结果
+        print_analysis_result(final_result)
     else:
         # 非流式
-        result = process_image(base64_image, config['prompt'], config['model'], stream=False)
+        result = process_image_sync(base64_image, config['prompt'], config['model'])
         if result['success']:
             if result['extracted_answer']:
                 show_notification("AI分析结果", result['extracted_answer'])
-                print("[+] 提取的答案: " + result['extracted_answer'])
-                print("[+] 完整回复: " + result['raw_result'])
             else:
                 show_notification("AI分析结果", result['raw_result'])
-                print("[+] AI分析结果: " + result['raw_result'])
         else:
-            print("[-] 未能获取分析结果。")
             if 'error' in result:
                 show_notification("处理错误", f"图片处理失败: {result['error']}")
+        
+        # 输出命令行结果
+        print_analysis_result(result)
 
 def handle_task_queue(root):
     """处理队列中的任务"""

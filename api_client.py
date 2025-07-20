@@ -29,7 +29,7 @@ def _prepare_request_data(base64_image, prompt, model, stream=False):
                 ],
             }
         ],
-        "max_tokens": 2048,
+        "max_tokens": 32768,
     }
     
     if stream:
