@@ -143,16 +143,9 @@ def handle_task_queue(root):
     try:
         while True:
             task_data = task_queue.get(block=False)
-            if len(task_data) >= 4 and task_data[0] == 'select_region':
+            if task_data[0] == 'select_region':
                 task_type, screenshot_image, config_name, need_red_box = task_data
                 selector = RegionSelector(root, screenshot_image, config_name, need_red_box)
-            elif len(task_data) >= 3 and task_data[0] == 'select_region':
-                task_type, screenshot_image, config_name = task_data
-                selector = RegionSelector(root, screenshot_image, config_name)
-            elif len(task_data) == 2 and task_data[0] == 'select_region':
-                # 向后兼容
-                task_type, screenshot_image = task_data
-                selector = RegionSelector(root, screenshot_image)
             else:
                 continue
                 
