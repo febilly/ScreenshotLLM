@@ -54,7 +54,13 @@ def process_hotkey(config):
             print("[-] 操作取消：选择的区域无效。")
             return
         crop_bbox = bbox['crop_bbox']
-        red_box_bbox = bbox.get('red_box_bbox')
+        # 支持新的多红框格式和旧的单红框格式
+        red_box_bboxes = bbox.get('red_box_bboxes')  # 新格式：多个红框
+        if not red_box_bboxes:
+            # 兼容旧格式：单个红框
+            red_box_bbox = bbox.get('red_box_bbox')
+            red_box_bboxes = [red_box_bbox] if red_box_bbox else None
+        
         if (crop_bbox[2] - crop_bbox[0]) <= 1 or (crop_bbox[3] - crop_bbox[1]) <= 1:
             print("[-] 操作取消：选择的裁切区域过小或无效。")
             return
@@ -64,10 +70,10 @@ def process_hotkey(config):
             print("[-] 操作取消：选择的区域过小或无效。")
             return
         crop_bbox = bbox
-        red_box_bbox = None
+        red_box_bboxes = None
 
     # 4. 裁剪并编码选定区域
-    base64_image = crop_and_encode_image(full_screenshot, crop_bbox, red_box_bbox)
+    base64_image = crop_and_encode_image(full_screenshot, crop_bbox, red_box_bboxes)
     if not base64_image:
         return
 

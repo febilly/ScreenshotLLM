@@ -7,6 +7,7 @@ import time
 import tkinter as tk
 from tkinter import Toplevel, Canvas
 from PIL import ImageTk
+import keyboard  # 用于检测键盘状态
 
 # 全局队列用于线程间通信
 task_queue = queue.Queue()
@@ -60,6 +61,7 @@ class RegionSelector:
         self.need_red_box = need_red_box
         self.selection_stage = 1  # 1: 选择裁切区域, 2: 选择红框区域
         self.crop_bbox = None  # 存储第一次选择的裁切区域
+        self.red_box_bboxes = []  # 存储多个红框区域
         
         # 使用截图的实际尺寸来设置窗口，而不是虚拟屏幕几何
         # 这样确保窗口尺寸与截图完全匹配
@@ -189,6 +191,8 @@ class RegionSelector:
         self.top.bind("<ButtonRelease-1>", self.on_mouse_up)
         self.top.bind("<Motion>", self.on_mouse_motion)
         self.top.bind("<Escape>", self.on_escape)
+        self.top.bind("<KeyPress>", self.on_key_press)
+        self.top.focus_set()  # 确保窗口可以接收键盘事件
         self.selection = None
 
     def on_escape(self, event):
@@ -405,6 +409,9 @@ class RegionSelector:
                     self.canvas.delete(self.selection_rect)
                     self.selection_rect = None
                 
+                # 绘制已选择的红框
+                self.draw_existing_red_boxes_on_canvas()
+                
             else:
                 # 最后一步：完成选择
                 if self.need_red_box and self.selection_stage == 2:
@@ -414,12 +421,42 @@ class RegionSelector:
                     red_box_y1 = y1
                     red_box_x2 = x2
                     red_box_y2 = y2
-                                        
-                    # 返回裁切区域和红框区域的坐标
-                    self.selection = {
-                        'crop_bbox': self.crop_bbox,
-                        'red_box_bbox': (red_box_x1, red_box_y1, red_box_x2, red_box_y2)
-                    }
+                    
+                    # 添加当前红框到列表中
+                    current_red_box = (red_box_x1, red_box_y1, red_box_x2, red_box_y2)
+                    self.red_box_bboxes.append(current_red_box)
+                    
+                    # 检查是否按住了Shift键
+                    shift_pressed = keyboard.is_pressed('shift')
+                    
+                    if shift_pressed:
+                        # 继续选择下一个红框
+                        
+                        # 重置选择状态，准备下一个红框选择
+                        self.is_selecting = False
+                        self.start_x = None
+                        self.start_y = None
+                        
+                        # 清除当前选择框
+                        if self.selection_rect:
+                            self.canvas.delete(self.selection_rect)
+                            self.selection_rect = None
+                        
+                        # 更新标题显示当前红框数量
+                        self.update_title_text(f"第2步: 选择红框区域 (已选择{len(self.red_box_bboxes)}个，按住Shift继续，或按空格/回车完成)")
+                        
+                        # 在画布上绘制已选择的红框
+                        self.draw_existing_red_boxes_on_canvas()
+                        
+                        # 不退出，继续等待下一个红框选择
+                        return
+                    else:
+                        # 完成所有红框选择
+                        # 返回裁切区域和所有红框区域的坐标
+                        self.selection = {
+                            'crop_bbox': self.crop_bbox,
+                            'red_box_bboxes': self.red_box_bboxes  # 改为复数形式
+                        }
                 else:
                     # 普通模式，只返回裁切区域
                     self.selection = (x1, y1, x2, y2)
@@ -467,14 +504,17 @@ class RegionSelector:
         except Exception as e:
             print(f"更新遮罩图片失败: {e}")
 
-    def update_title_text(self):
+    def update_title_text(self, custom_text=None):
         """更新标题文字"""
         # 删除旧的标题
         self.canvas.delete("title_bg")
         self.canvas.delete("title")
         
         # 重新创建标题
-        title_text = f"模式: {self.config_name} - 第2步: 选择红框区域"
+        if custom_text:
+            title_text = f"模式: {self.config_name} - {custom_text}"
+        else:
+            title_text = f"模式: {self.config_name} - 第2步: 选择红框区域 (按空格/回车完成)"
         
         # 先创建临时文字对象来测量实际尺寸
         temp_text = self.canvas.create_text(0, 0, text=title_text, font=("微软雅黑", 16, "bold"))
@@ -523,3 +563,45 @@ class RegionSelector:
 
     def get_selection(self):
         return self.selection
+
+    def draw_existing_red_boxes_on_canvas(self):
+        """在画布上绘制已经选择的红框"""
+        if not self.red_box_bboxes or not self.crop_bbox:
+            return
+            
+        crop_x1, crop_y1, _, _ = self.crop_bbox
+        
+        # 删除之前绘制的红框
+        self.canvas.delete("existing_red_box")
+        
+        # 绘制每个已选择的红框
+        for i, red_box in enumerate(self.red_box_bboxes):
+            # 转换相对坐标为绝对画布坐标
+            abs_x1 = crop_x1 + red_box[0]
+            abs_y1 = crop_y1 + red_box[1]
+            abs_x2 = crop_x1 + red_box[2] 
+            abs_y2 = crop_y1 + red_box[3]
+            
+            # 在画布上绘制红框
+            for width_offset in range(3):  # 画粗线
+                self.canvas.create_rectangle(
+                    abs_x1 + width_offset, abs_y1 + width_offset,
+                    abs_x2 - width_offset, abs_y2 - width_offset,
+                    outline='red', width=1, tags="existing_red_box"
+                )
+
+    def on_key_press(self, event):
+        """处理键盘按键事件"""
+        # 只在红框选择阶段且没有正在画框时才处理空格和回车键
+        if (self.need_red_box and self.selection_stage == 2 and 
+            not self.is_selecting and len(self.red_box_bboxes) > 0):
+            
+            if event.keysym in ['space', 'Return']:
+                # 空格键或回车键：完成所有红框选择
+                # 返回裁切区域和所有红框区域的坐标
+                self.selection = {
+                    'crop_bbox': self.crop_bbox,
+                    'red_box_bboxes': self.red_box_bboxes
+                }
+                self.top.destroy()
+                self.master.quit()

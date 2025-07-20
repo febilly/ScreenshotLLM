@@ -29,15 +29,15 @@ def take_screenshot():
         show_notification("截图失败", f"无法捕获屏幕: {e}")
         return None
 
-def crop_and_encode_image(image_obj, bbox, red_box_bbox=None):
+def crop_and_encode_image(image_obj, bbox, red_box_bboxes=None):
     """从大图中裁剪出选定区域并进行Base64编码"""
     try:
         # 裁剪图片
         cropped_img = image_obj.crop(bbox)
         
         # 如果有红框区域，在裁剪后的图片上画框
-        if red_box_bbox:
-            cropped_img = draw_red_box_on_image(cropped_img, red_box_bbox)
+        if red_box_bboxes:
+            cropped_img = draw_red_box_on_image(cropped_img, red_box_bboxes)
         
         # 将图片存入内存中的字节流
         buffered = io.BytesIO()
@@ -52,8 +52,8 @@ def crop_and_encode_image(image_obj, bbox, red_box_bbox=None):
         show_notification("错误", f"裁剪或编码失败: {e}")
         return None
 
-def draw_red_box_on_image(image, red_box_bbox):
-    """在图片上画红色框标识重点区域"""
+def draw_red_box_on_image(image, red_box_bboxes):
+    """在图片上画红色框标识重点区域，支持多个红框"""
     try:
         # 复制图片以避免修改原图
         img_with_box = image.copy()
@@ -62,22 +62,27 @@ def draw_red_box_on_image(image, red_box_bbox):
         # 获取图片尺寸
         width, height = img_with_box.size
         
-        # 使用用户选择的红框坐标
-        x1, y1, x2, y2 = red_box_bbox
+        # 如果传入的是单个红框（向后兼容）
+        if isinstance(red_box_bboxes, tuple) and len(red_box_bboxes) == 4:
+            red_box_bboxes = [red_box_bboxes]
         
-        # 确保坐标在图片范围内
-        x1 = max(0, min(width, x1))
-        y1 = max(0, min(height, y1))
-        x2 = max(0, min(width, x2))
-        y2 = max(0, min(height, y2))
-        
-        # 画红色框
-        box_width = max(3, min(width, height) // 200)  # 动态调整框线宽度
-        for i in range(box_width):
-            draw.rectangle([
-                x1 + i, y1 + i, 
-                x2 - i, y2 - i
-            ], outline='red', width=1)
+        # 画多个红框
+        for red_box_bbox in red_box_bboxes:
+            x1, y1, x2, y2 = red_box_bbox
+            
+            # 确保坐标在图片范围内
+            x1 = max(0, min(width, x1))
+            y1 = max(0, min(height, y1))
+            x2 = max(0, min(width, x2))
+            y2 = max(0, min(height, y2))
+            
+            # 画红色框
+            box_width = max(3, min(width, height) // 200)  # 动态调整框线宽度
+            for i in range(box_width):
+                draw.rectangle([
+                    x1 + i, y1 + i, 
+                    x2 - i, y2 - i
+                ], outline='red', width=1)
         
         return img_with_box
         
