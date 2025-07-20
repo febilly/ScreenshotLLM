@@ -13,37 +13,6 @@ import keyboard  # 用于检测键盘状态
 task_queue = queue.Queue()
 result_queue = queue.Queue()
 
-def get_virtual_screen_geometry():
-    """获取虚拟屏幕的几何信息（包括所有显示器），直接使用系统未缩放的像素值"""
-    try:
-        import ctypes
-        from ctypes import wintypes
-        user32 = ctypes.windll.user32
-        
-        # 获取虚拟屏幕的尺寸（系统原始像素，与MSS截图库一致）
-        left = user32.GetSystemMetrics(76)    # SM_XVIRTUALSCREEN
-        top = user32.GetSystemMetrics(77)     # SM_YVIRTUALSCREEN  
-        width = user32.GetSystemMetrics(78)   # SM_CXVIRTUALSCREEN
-        height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
-        
-        print(f"[*] 虚拟屏幕尺寸: {width}x{height} 位置({left}, {top})")
-        
-        return {
-            'x': left,
-            'y': top, 
-            'width': width,
-            'height': height
-        }
-    except Exception as e:
-        print(f"[-] 获取虚拟屏幕信息失败: {e}")
-        # 回退到主屏幕
-        return {
-            'x': 0,
-            'y': 0,
-            'width': 1920,
-            'height': 1080
-        }  # TODO: 这个默认值可能会出问题
-
 def select_region_on_image(screenshot_image, config_name=None, need_red_box=False):
     """在一个静态的截图上允许用户选择矩形区域 - 使用队列确保在主线程中执行"""
     # 将任务放入队列

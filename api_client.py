@@ -95,10 +95,3 @@ def analyze_image_with_openrouter_stream(base64_image, prompt, model):
         print(f"[-] 解析API响应失败: {e}")
         show_notification("API 错误", f"解析API响应失败，收到的数据格式不正确。")
         yield None
-
-def analyze_image_with_openrouter(base64_image, prompt, model, stream=False):
-    """将图片和提示词发送到OpenRouter API - 兼容性包装函数"""
-    if stream:
-        return analyze_image_with_openrouter_stream(base64_image, prompt, model)
-    else:
-        return analyze_image_with_openrouter_sync(base64_image, prompt, model)
