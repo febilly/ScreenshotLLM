@@ -139,7 +139,7 @@ def _create_popup_base(title):
     
     return popup, text_area, button_frame
 
-def _create_popup_buttons(button_frame, popup, copy_content_func):
+def _create_popup_buttons(button_frame, popup, copy_content_func, close_action=None):
     """创建弹窗按钮"""
     # 复制到剪贴板按钮
     def copy_to_clipboard():
@@ -167,11 +167,12 @@ def _create_popup_buttons(button_frame, popup, copy_content_func):
     )
     copy_btn.pack(side=tk.LEFT, padx=(0, 10))
     
-    # 关闭按钮
+    # 关闭按钮，支持自定义关闭行为
+    close_command = close_action if close_action else popup.destroy
     close_btn = tk.Button(
         button_frame,
         text="❌ 关闭",
-        command=popup.destroy,
+        command=close_command,
         font=(POPUP_CONFIGS['font_family'], POPUP_CONFIGS['button_font_size']),
         bg="#dc3545",
         fg="white",
@@ -181,8 +182,10 @@ def _create_popup_buttons(button_frame, popup, copy_content_func):
         pady=POPUP_CONFIGS['button_padding_y']
     )
     close_btn.pack(side=tk.RIGHT)
+    
+    return close_btn
 
-def _setup_popup_display(popup, title):
+def _setup_popup_display(popup, title, close_action=None):
     """设置弹窗显示位置和焦点"""
     # 居中显示窗口
     popup.update_idletasks()
@@ -204,8 +207,13 @@ def _setup_popup_display(popup, title):
     except Exception as e:
         print(f"设置窗口焦点时出错: {e}")
     
-    # 设置键盘事件
-    popup.bind('<Escape>', lambda e: popup.destroy())
+    # 设置键盘事件和窗口关闭协议
+    if close_action:
+        popup.bind('<Escape>', lambda e: close_action())
+        popup.protocol("WM_DELETE_WINDOW", close_action)
+    else:
+        popup.bind('<Escape>', lambda e: popup.destroy())
+        popup.protocol("WM_DELETE_WINDOW", popup.destroy)
     
     # 简化焦点确保逻辑
     def ensure_focus():
@@ -225,7 +233,7 @@ def show_long_message_popup(title, message):
         text_area.insert(tk.END, message)
         text_area.config(state=tk.DISABLED)  # 设为只读
         
-        # 创建按钮
+        # 创建按钮（不需要自定义关闭行为）
         _create_popup_buttons(button_frame, popup, lambda: message)
         
         # 设置显示位置和焦点
@@ -242,49 +250,86 @@ def show_notification_stream(title, content_iter):
     def create_stream_popup():
         popup, text_area, button_frame = _create_popup_base(title)
         
+        # 请求完成状态标志
+        request_completed = threading.Event()
+        is_hidden = False
+        
         # 初始显示提示
         text_area.insert(tk.END, "(AI正在生成...)")
         text_area.config(state=tk.DISABLED)
 
-        # 创建按钮
-        _create_popup_buttons(button_frame, popup, lambda: text_area.get("1.0", tk.END).strip())
+        # 自定义关闭行为
+        def handle_close():
+            nonlocal is_hidden
+            if not request_completed.is_set():
+                # 请求未完成，只隐藏窗口
+                popup.withdraw()
+                is_hidden = True
+                print(f"[弹窗] 请求进行中，'{title}' 弹窗已隐藏")
+            else:
+                # 请求已完成，真正关闭窗口
+                popup.destroy()
+                print(f"[弹窗] '{title}' 弹窗已关闭")
 
-        # 设置显示位置和焦点
-        _setup_popup_display(popup, title)
+        # 创建按钮，传入自定义关闭行为
+        close_btn = _create_popup_buttons(button_frame, popup, lambda: text_area.get("1.0", tk.END).strip(), handle_close)
+
+        # 设置显示位置和焦点，传入自定义关闭行为
+        _setup_popup_display(popup, title, handle_close)
 
         # 流式内容刷新逻辑
         def update_content():
+            nonlocal is_hidden
             last_content = ""
             first_chunk = True
-            for content in content_iter:
-                if content is None:
-                    break
+            
+            try:
+                for content in content_iter:
+                    if content is None:
+                        break
 
-                # 收到第一个有效数据块时，清空初始提示
-                if first_chunk and content:
-                    text_area.config(state=tk.NORMAL)
-                    text_area.delete("1.0", tk.END)
-                    text_area.config(state=tk.DISABLED)
-                    first_chunk = False
-
-                if content != last_content:
-                    text_area.config(state=tk.NORMAL)
-                    
-                    # 智能更新逻辑：处理内容跳变（如提取答案时）
-                    if content.startswith(last_content):
-                        # 增量更新：只追加新内容，避免闪烁
-                        delta = content[len(last_content):]
-                        text_area.insert(tk.END, delta)
-                    else:
-                        # 内容跳变：完全重写文本框
+                    # 收到第一个有效数据块时，清空初始提示
+                    if first_chunk and content:
+                        text_area.config(state=tk.NORMAL)
                         text_area.delete("1.0", tk.END)
-                        text_area.insert(tk.END, content)
+                        text_area.config(state=tk.DISABLED)
+                        first_chunk = False
 
-                    text_area.see(tk.END)  # 自动滚动到末尾
-                    text_area.config(state=tk.DISABLED)
-                    last_content = content
+                    if content != last_content:
+                        text_area.config(state=tk.NORMAL)
+                        
+                        # 智能更新逻辑：处理内容跳变（如提取答案时）
+                        if content.startswith(last_content):
+                            # 增量更新：只追加新内容，避免闪烁
+                            delta = content[len(last_content):]
+                            text_area.insert(tk.END, delta)
+                        else:
+                            # 内容跳变：完全重写文本框
+                            text_area.delete("1.0", tk.END)
+                            text_area.insert(tk.END, content)
+
+                        # text_area.see(tk.END)  # 自动滚动到末尾（已禁用）
+                        text_area.config(state=tk.DISABLED)
+                        last_content = content
+                        
+            except Exception as e:
+                print(f"[流式弹窗] 内容更新出错: {e}")
+            finally:
+                # 请求完成，标记完成状态
+                request_completed.set()
+                print(f"[弹窗] '{title}' 请求已完成")
+                
+                # 如果窗口被隐藏，直接关闭窗口
+                if is_hidden:
+                    print(f"[弹窗] '{title}' 的结果已生成完成，隐藏的窗口将被关闭")
+                    try:
+                        popup.destroy()
+                    except:
+                        print(f"[弹窗] '{title}' 窗口已被销毁，无法关闭")
+                        pass
 
         threading.Thread(target=update_content, daemon=True).start()
         popup.mainloop()
+        
     popup_thread = threading.Thread(target=create_stream_popup, daemon=True)
     popup_thread.start()
