@@ -45,20 +45,40 @@ class RegionSelector:
         self.top.geometry(f"{screenshot_width}x{screenshot_height}+0+0")
         self.top.overrideredirect(True)  # 移除窗口边框
         self.top.attributes("-topmost", True)
+        
+        # 立即尝试获取焦点
         self.top.focus_force()
         self.top.lift()
         
-        # 强制抢夺鼠标焦点
+        # Windows 特定的强制焦点获取
         try:
             import ctypes
             from ctypes import wintypes
             user32 = ctypes.windll.user32
+            
+            # 获取当前前台窗口，稍后恢复
+            self.original_foreground_window = user32.GetForegroundWindow()
             
             # 定义函数参数类型
             user32.SetForegroundWindow.argtypes = [wintypes.HWND]
             user32.SetForegroundWindow.restype = wintypes.BOOL
             user32.SetActiveWindow.argtypes = [wintypes.HWND]
             user32.SetActiveWindow.restype = wintypes.HWND
+            user32.SetFocus.argtypes = [wintypes.HWND]
+            user32.SetFocus.restype = wintypes.HWND
+            user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+            user32.ShowWindow.restype = wintypes.BOOL
+            user32.BringWindowToTop.argtypes = [wintypes.HWND]
+            user32.BringWindowToTop.restype = wintypes.BOOL
+            
+            # 获取当前线程和前台窗口线程ID
+            kernel32 = ctypes.windll.kernel32
+            current_thread_id = kernel32.GetCurrentThreadId()
+            foreground_thread_id = user32.GetWindowThreadProcessId(self.original_foreground_window, None)
+            
+            # 如果不是同一个线程，需要连接输入队列
+            if current_thread_id != foreground_thread_id:
+                user32.AttachThreadInput(current_thread_id, foreground_thread_id, True)
             
             # 释放任何鼠标捕获
             user32.ReleaseCapture()

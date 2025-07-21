@@ -145,22 +145,57 @@ def handle_task_queue(root):
             task_data = task_queue.get(block=False)
             if task_data[0] == 'select_region':
                 task_type, screenshot_image, config_name, need_red_box = task_data
+                
+                # 确保主窗口处于正确状态
+                root.withdraw()
+                root.update()  # 强制更新窗口状态
+                
                 selector = RegionSelector(root, screenshot_image, config_name, need_red_box)
+                
+                # 强制获得焦点的额外措施
+                selector.top.update_idletasks()
+                selector.top.after(1, lambda: _ensure_focus(selector.top))
+                
+                selector.top.mainloop()
+                result_queue.put(selector.get_selection())
+                
+                root.after(50, lambda: handle_task_queue(root))
+                
+                return  # 等待延迟执行
             else:
                 continue
-                
-            # 先隐藏主窗口，显示选择界面
-            root.withdraw()
-            selector.top.mainloop()
-            result_queue.put(selector.get_selection())
-            # 重新显示主窗口
-            root.deiconify()
-            root.withdraw()
-            break
     except:
         pass
-    # 每100ms检查一次队列
-    root.after(100, lambda: handle_task_queue(root))
+    # 每50ms检查一次队列（提高响应速度）
+    root.after(50, lambda: handle_task_queue(root))
+
+def _ensure_focus(window):
+    """确保窗口获得焦点的辅助函数"""
+    try:
+        window.lift()
+        window.focus_force()
+        window.grab_set()  # 获取全局焦点
+        
+        # Windows特定的焦点设置
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        
+        # 获取窗口句柄
+        hwnd = window.winfo_id()
+        
+        # 强制设置为前台窗口
+        user32.SetForegroundWindow(hwnd)
+        user32.SetActiveWindow(hwnd)
+        user32.SetFocus(hwnd)
+        
+        # 确保窗口可见
+        user32.ShowWindow(hwnd, 1)  # SW_SHOWNORMAL
+        user32.BringWindowToTop(hwnd)
+        
+    except Exception as e:
+        print(f"设置窗口焦点时出错: {e}")
+        pass
 
 def main():
     """主函数，负责注册快捷键并保持脚本运行"""
