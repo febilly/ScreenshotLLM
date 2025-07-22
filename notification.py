@@ -133,7 +133,8 @@ def _create_popup_base(title):
         selectbackground="#0078d4",
         selectforeground="white",
         relief="solid",
-        borderwidth=1
+        borderwidth=1,
+        spacing3=POPUP_CONFIGS['paragraph_spacing']  # 只设置段后间距
     )
     text_area.pack(fill=tk.BOTH, expand=True)
     

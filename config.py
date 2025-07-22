@@ -78,4 +78,5 @@ POPUP_CONFIGS = {
     'button_padding_x': 15,          # 按钮水平内边距
     'button_padding_y': 8,           # 按钮垂直内边距
     'resizable': True,               # 是否允许调整窗口大小
+    'paragraph_spacing': 6,          # 段后间距（像素）
 }
