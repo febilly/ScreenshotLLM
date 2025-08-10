@@ -7,7 +7,6 @@ import time
 import tkinter as tk
 from tkinter import Toplevel, Canvas
 from PIL import ImageTk
-import keyboard  # 用于检测键盘状态
 
 # 全局队列用于线程间通信
 task_queue = queue.Queue()
@@ -420,7 +419,7 @@ class RegionSelector:
                     self.red_box_bboxes.append(current_red_box)
                     
                     # 检查是否按住了Shift键
-                    shift_pressed = keyboard.is_pressed('shift')
+                    shift_pressed = (event.state & 1)
                     
                     if shift_pressed:
                         # 继续选择下一个红框

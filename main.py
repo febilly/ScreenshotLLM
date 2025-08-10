@@ -4,7 +4,7 @@
 
 import sys
 import threading
-import keyboard
+from pynput import keyboard
 import tkinter as tk
 from PIL import ImageTk
 
@@ -217,11 +217,20 @@ def main():
     print("--- 截图分析助手已启动---")
     print("正在监听以下快捷键:")
 
+    # 构建快捷键字典
+    hotkey_map = {
+        hotkey: (lambda data=config: threading.Thread(target=process_hotkey, args=(data,)).start())
+        for hotkey, config in HOTKEY_CONFIGS.items()
+    }
+
     # 注册分析功能快捷键
     for hotkey, config in HOTKEY_CONFIGS.items():
         config_name = config.get('name', '未知模式')
         print(f"  - {hotkey}: {config_name} (模型: {config['model']})")
-        keyboard.add_hotkey(hotkey, lambda data=config: threading.Thread(target=process_hotkey, args=(data,)).start())
+
+    # 启动快捷键监听器
+    listener = keyboard.GlobalHotKeys(hotkey_map)
+    listener.start()
 
     print("\n脚本正在后台运行。您可以使用设定的快捷键进行截图和分析。")
     print("要停止脚本，请关闭此窗口或按 Ctrl+C。")
