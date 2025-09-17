@@ -91,45 +91,33 @@ def draw_red_box_on_image(image, red_box_bboxes):
         # 如果画框失败，返回原图
         return image
 
-def extract_answer_from_brackets(text):
-    """从文本中提取方括号[]、中文括号【】或LaTeX格式的boxed答案作为最终答案"""
+def extract_answer_from_markers(text):
+    """从文本中提取<answer>和</answer>标签中的答案作为最终答案"""
     
-    def _extract_from_complete_brackets():
-        """提取完整括号对中的内容"""
-        # 定义所有完整括号的模式
+    def _extract_from_complete_markers():
+        """提取完整标记对中的内容"""
+        # 定义所有完整标记的模式
         complete_patterns = [
-            # LaTeX格式的boxed答案
-            r'\$\\boxed\{\\text\{([^}]*)\}\}\$',  # $\boxed{\text{答案}}$
-            r'\$\\boxed\{([^}]*)\}\$',           # $\boxed{答案}$
-            r'\\boxed\{\\text\{([^}]*)\}\}',     # \boxed{\text{答案}}
-            r'\\boxed\{([^}]*)\}',               # \boxed{答案}
-            # 中文方括号
-            r'【([^】]*)】',                        # 【答案】
-            # 普通方括号
-            r'\[([^\]]*)\]'                      # [答案]
+            # XML标签标记（优先级最高）
+            r'<answer>(.*?)</answer>',             # <answer>答案</answer>
         ]
         
         for pattern in complete_patterns:
-            matches = re.findall(pattern, text)
+            matches = re.findall(pattern, text, re.DOTALL)
             if matches:
                 return matches[-1].strip()
         
         return None
     
-    def _extract_from_incomplete_brackets():
-        """从不完整的括号中提取内容（括号后到文本结尾）"""
-        # 定义不完整括号的模式
+    def _extract_from_incomplete_markers():
+        """从不完整的标记中提取内容（标记后到文本结尾）"""
+        # 定义不完整标记的模式
         incomplete_patterns = [
-            r'\$\\boxed\{\\text\{([^}]*?)(?:\s*$)',      # $\boxed{\text{答案 (缺少}}$)
-            r'\$\\boxed\{([^}]*?)(?:\s*$)',              # $\boxed{答案 (缺少}$)
-            r'\\boxed\{\\text\{([^}]*?)(?:\s*$)',        # \boxed{\text{答案 (缺少}})
-            r'\\boxed\{([^}]*?)(?:\s*$)',                # \boxed{答案 (缺少})
-            r'【([^】]*?)(?:\s*$)',                        # 【答案 (缺少】)
-            r'\[([^\]]*?)(?:\s*$)'                       # [答案 (缺少])
+            r'<answer>(.*?)(?:\s*$)',              # <answer>答案 (缺少</answer>)
         ]
         
         for pattern in incomplete_patterns:
-            match = re.search(pattern, text)
+            match = re.search(pattern, text, re.DOTALL)
             if match:
                 # 从匹配位置开始，提取到文本结尾
                 start_pos = match.start(1)
@@ -139,10 +127,10 @@ def extract_answer_from_brackets(text):
         
         return None
     
-    # 首先尝试完整括号对
-    result = _extract_from_complete_brackets()
+    # 首先尝试完整标记对
+    result = _extract_from_complete_markers()
     if result:
         return result
     
-    # 如果没有找到完整括号对，尝试不完整括号
-    return _extract_from_incomplete_brackets()
+    # 如果没有找到完整标记对，尝试不完整标记
+    return _extract_from_incomplete_markers()

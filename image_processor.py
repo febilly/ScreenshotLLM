@@ -4,7 +4,7 @@
 """
 
 from api_client import analyze_image_with_openrouter_sync, analyze_image_with_openrouter_stream
-from image_utils import extract_answer_from_brackets
+from image_utils import extract_answer_from_markers
 
 def _create_result_dict(success, raw_result=None, extracted_answer=None, error=None):
     """创建标准化的结果字典"""
@@ -22,7 +22,7 @@ def _process_analysis_result(analysis_result):
     if not analysis_result:
         return _create_result_dict(success=False)
     
-    extracted_answer = extract_answer_from_brackets(analysis_result)
+    extracted_answer = extract_answer_from_markers(analysis_result)
     return _create_result_dict(
         success=True,
         raw_result=analysis_result,
