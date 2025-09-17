@@ -69,8 +69,8 @@ NOTIFICATION_CONFIGS = {
 
 # 弹窗窗口配置
 POPUP_CONFIGS = {
-    'width': 800,                    # 弹窗宽度
-    'height': 600,                   # 弹窗高度
+    'width': 1200,                    # 弹窗宽度
+    'height': 900,                   # 弹窗高度
     'font_family': "微软雅黑",        # 字体系列
     'font_size': 12,                 # 字体大小
     'button_font_size': 10,          # 按钮字体大小
