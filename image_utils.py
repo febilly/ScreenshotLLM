@@ -99,13 +99,16 @@ def extract_answer_from_markers(text):
         # 定义所有完整标记的模式
         complete_patterns = [
             # XML标签标记（优先级最高）
-            r'<answer>(.*?)</answer>',             # <answer>答案</answer>
+            r'(:?.*<answer>)+(.*)</answer>',             # <answer>答案</answer>
         ]
         
         for pattern in complete_patterns:
             matches = re.findall(pattern, text, re.DOTALL)
             if matches:
-                return matches[-1].strip()
+                result = matches[-1]
+                if isinstance(result, tuple):
+                    result = result[-1]
+                return result.strip()
         
         return None
     
@@ -113,7 +116,7 @@ def extract_answer_from_markers(text):
         """从不完整的标记中提取内容（标记后到文本结尾）"""
         # 定义不完整标记的模式
         incomplete_patterns = [
-            r'<answer>(.*?)(?:\s*$)',              # <answer>答案 (缺少</answer>)
+            r'(:?.*<answer>)+(.*)(?:\s*$)',              # <answer>答案 (缺少</answer>)
         ]
         
         for pattern in incomplete_patterns:
