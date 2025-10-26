@@ -62,6 +62,9 @@ class MonitorManager:
     def take_all_monitors_screenshot(self):
         """截取所有显示器，返回包含各显示器位置信息的完整虚拟桌面"""
         try:
+            # 每次截屏时重新获取显示器信息，以应对屏幕尺寸变化
+            self._init_monitors()
+            
             # 截取包含所有显示器的虚拟桌面
             virtual_monitor = self.monitors[0]  # 索引0是虚拟桌面
             sct = self._get_sct()
