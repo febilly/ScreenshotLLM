@@ -96,37 +96,25 @@ def extract_answer_from_markers(text):
     
     def _extract_from_complete_markers():
         """提取完整标记对中的内容"""
-        # 定义所有完整标记的模式
-        complete_patterns = [
-            # XML标签标记（优先级最高）
-            r'(:?.*<answer>)+(.*)</answer>',             # <answer>答案</answer>
-        ]
+        # 定义所有完整标记的模式 - 匹配所有 <answer>...</answer> 对
+        # 使用非贪婪匹配，找到所有的配对
+        complete_pattern = r'<answer>((?:(?!<answer>).)*?)</answer>'
         
-        for pattern in complete_patterns:
-            matches = re.findall(pattern, text, re.DOTALL)
-            if matches:
-                result = matches[-1]
-                if isinstance(result, tuple):
-                    result = result[-1]
-                return result.strip()
+        matches = re.findall(complete_pattern, text, re.DOTALL)
+        if matches:
+            # 返回最后一个匹配
+            return matches[-1].strip()
         
         return None
     
     def _extract_from_incomplete_markers():
         """从不完整的标记中提取内容（标记后到文本结尾）"""
-        # 定义不完整标记的模式
-        incomplete_patterns = [
-            r'(:?.*<answer>)+(.*)(?:\s*$)',              # <answer>答案 (缺少</answer>)
-        ]
+        # 查找最后一个 <answer> 标记
+        incomplete_pattern = r'<answer>((?:(?!</answer>).)*?)$'
         
-        for pattern in incomplete_patterns:
-            match = re.search(pattern, text, re.DOTALL)
-            if match:
-                # 从匹配位置开始，提取到文本结尾
-                start_pos = match.start(1)
-                remaining_text = text[start_pos:].strip()
-                if remaining_text:
-                    return remaining_text
+        match = re.search(incomplete_pattern, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
         
         return None
     
