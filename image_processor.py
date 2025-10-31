@@ -4,6 +4,7 @@
 """
 
 from api_client import analyze_image_with_openrouter_sync, analyze_image_with_openrouter_stream
+from config import LLMProvider
 from image_utils import extract_answer_from_markers
 
 def _create_result_dict(success, raw_result=None, extracted_answer=None, error=None):
@@ -29,7 +30,7 @@ def _process_analysis_result(analysis_result):
         extracted_answer=extracted_answer
     )
 
-def process_image_sync(base64_image, prompt, model):
+def process_image_sync(base64_image, prompt, model, provider: LLMProvider):
     """
     非流式处理已编码的图片
     
@@ -37,6 +38,7 @@ def process_image_sync(base64_image, prompt, model):
     - base64_image: base64编码的图片数据
     - prompt: 提示词
     - model: 使用的模型
+    - provider: LLM服务提供商配置
     
     返回：
     - dict: 包含原始结果和提取答案的字典
@@ -45,7 +47,7 @@ def process_image_sync(base64_image, prompt, model):
         print("[*] 正在调用AI模型进行分析，请稍候...")
         
         # 非流式调用API
-        analysis_result = analyze_image_with_openrouter_sync(base64_image, prompt, model)
+        analysis_result = analyze_image_with_openrouter_sync(base64_image, prompt, model, provider)
         result = _process_analysis_result(analysis_result)
         
         if result['success']:
@@ -57,7 +59,7 @@ def process_image_sync(base64_image, prompt, model):
         print(f"[-] 图片处理失败: {e}")
         return _create_result_dict(success=False, error=str(e))
 
-def process_image_stream(base64_image, prompt, model):
+def process_image_stream(base64_image, prompt, model, provider: LLMProvider):
     """
     流式处理已编码的图片
     
@@ -65,6 +67,7 @@ def process_image_stream(base64_image, prompt, model):
     - base64_image: base64编码的图片数据
     - prompt: 提示词
     - model: 使用的模型
+    - provider: LLM服务提供商配置
     
     Yields:
     - dict: 包含递增内容的字典
@@ -72,7 +75,7 @@ def process_image_stream(base64_image, prompt, model):
     try:
         print("[*] 正在调用AI模型进行分析，请稍候...")
         
-        for partial in analyze_image_with_openrouter_stream(base64_image, prompt, model):
+        for partial in analyze_image_with_openrouter_stream(base64_image, prompt, model, provider):
             if partial is None:
                 yield _create_result_dict(success=False)
                 return

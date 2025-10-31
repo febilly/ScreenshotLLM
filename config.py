@@ -3,6 +3,7 @@
 """
 
 import os
+from dataclasses import dataclass
 from dotenv import load_dotenv
 
 # 加载 .env 文件中的环境变量
@@ -11,6 +12,30 @@ load_dotenv()
 # 翻译的目标语言
 TARGET_LANGUAGE = "中文"
 
+# 服务提供商配置
+@dataclass
+class LLMProvider:
+    """LLM 服务提供商配置"""
+    name: str           # 提供商名称
+    api_url: str        # API 端点 URL
+    api_key: str        # API 密钥
+
+OPENROUTER_PROVIDER = None
+if os.getenv("OPENROUTER_API_KEY"):
+    OPENROUTER_PROVIDER = LLMProvider(
+        name="openrouter",
+        api_url="https://openrouter.ai/api/v1/chat/completions",
+        api_key=os.getenv("OPENROUTER_API_KEY")
+    )
+
+DASHSCOPE_PROVIDER = None
+if os.getenv("DASHSCOPE_API_KEY"):
+    DASHSCOPE_PROVIDER = LLMProvider(
+        name="dashscope",
+        api_url="https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        api_key=os.getenv("DASHSCOPE_API_KEY")
+    )
+
 # 快捷键配置
 HOTKEY_CONFIGS = {
     # 快捷键 1: 回答问题
@@ -18,6 +43,7 @@ HOTKEY_CONFIGS = {
         'name': "智能问答",
         'prompt': "请回答图中问题，请进行**简短**的思考，并给用户提供最终答案。将最终答案使用<answer>和</answer>标签将答案括起来。例如<answer>答案</answer>。用与图中问题相同的语言给出最终答案。",
         'model': "google/gemini-2.5-flash",
+        'provider': OPENROUTER_PROVIDER,
         'draw_box': False,
         'stream': False
     },
@@ -26,6 +52,7 @@ HOTKEY_CONFIGS = {
         'name': "文字识别与翻译",
         'prompt': f"请提取并返回这张图片选定区域中的所有文字。并且这些文字翻译为**{TARGET_LANGUAGE}**。如果图中文本是对另一种语言的解释，则不要翻译目标语言的文本。如果图中是漫画，则按照漫画的阅读顺序进行转录和翻译。在回复中，首先提供原文，将全部原文使用一对圆括号()括起来。然后提供{TARGET_LANGUAGE}翻译，将整个翻译结果使用<answer>和</answer>标签将答案括起来。例如<answer>答案</answer>。（即使有多段，也全放进<answer>和</answer>标签中）。",
         'model': "google/gemini-2.5-flash",
+        'provider': OPENROUTER_PROVIDER,
         'draw_box': False,
         'stream': True
     },
@@ -34,6 +61,7 @@ HOTKEY_CONFIGS = {
         'name': "图像描述",
         'prompt': f"请描述图中内容，使用精炼的语言简要介绍图中内容。如果图中是某个名字、名词、习语等，则解释这段字。如果图中着重强调了某一部分，则解释这一部分。使用{TARGET_LANGUAGE}回答。使用<answer>和</answer>标签将答案括起来。例如<answer>答案</answer>。",
         'model': "google/gemini-2.5-flash",
+        'provider': OPENROUTER_PROVIDER,
         'draw_box': False,
         'stream': True
     },
@@ -42,14 +70,11 @@ HOTKEY_CONFIGS = {
         'name': "解释框选区域",
         'prompt': f"请简要解释图中红色框起来的部分，及它在整个上下文（场景中、句子中等）中发挥的作用。使用{TARGET_LANGUAGE}回答。使用<answer>和</answer>标签将答案括起来。例如<answer>答案</answer>。",
         'model': "google/gemini-2.5-flash",
+        'provider': OPENROUTER_PROVIDER,
         'draw_box': True,
         'stream': True
     },
 }
-
-# API 配置
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # 显示器配置
 MONITOR_CONFIGS = {

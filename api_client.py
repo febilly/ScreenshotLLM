@@ -1,15 +1,15 @@
 """
-API客户端模块 - 负责与OpenRouter API进行通信
+API客户端模块 - 负责与LLM服务提供商API进行通信
 """
 
 import requests
-from config import OPENROUTER_API_KEY, OPENROUTER_API_URL
+from config import LLMProvider
 from notification import show_notification
 
-def _prepare_request_data(base64_image, prompt, model, stream=False):
+def _prepare_request_data(base64_image, prompt, model, provider: LLMProvider, stream=False):
     """准备API请求的headers和data"""
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Authorization": f"Bearer {provider.api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "http://localhost",
         "X-Title": "Screenshot Assistant"
@@ -37,12 +37,12 @@ def _prepare_request_data(base64_image, prompt, model, stream=False):
     
     return headers, data
 
-def analyze_image_with_openrouter_sync(base64_image, prompt, model):
-    """将图片和提示词发送到OpenRouter API - 非流式版本"""
-    headers, data = _prepare_request_data(base64_image, prompt, model, stream=False)
+def analyze_image_with_openrouter_sync(base64_image, prompt, model, provider: LLMProvider):
+    """将图片和提示词发送到LLM API - 非流式版本"""
+    headers, data = _prepare_request_data(base64_image, prompt, model, provider, stream=False)
 
     try:
-        response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=120)
+        response = requests.post(provider.api_url, headers=headers, json=data, timeout=120)
         response.raise_for_status()
         result = response.json()
         return result['choices'][0]['message']['content']
@@ -58,13 +58,13 @@ def analyze_image_with_openrouter_sync(base64_image, prompt, model):
         show_notification("API 错误", f"解析API响应失败，收到的数据格式不正确。")
         return None
 
-def analyze_image_with_openrouter_stream(base64_image, prompt, model):
-    """将图片和提示词发送到OpenRouter API - 流式版本"""
-    headers, data = _prepare_request_data(base64_image, prompt, model, stream=True)
+def analyze_image_with_openrouter_stream(base64_image, prompt, model, provider: LLMProvider):
+    """将图片和提示词发送到LLM API - 流式版本"""
+    headers, data = _prepare_request_data(base64_image, prompt, model, provider, stream=True)
 
     try:
         # 流式SSE
-        with requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=120, stream=True) as response:
+        with requests.post(provider.api_url, headers=headers, json=data, timeout=120, stream=True) as response:
             response.raise_for_status()
             response.encoding = 'utf-8'  # 强制使用UTF-8编码
             buffer = ""

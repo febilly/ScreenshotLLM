@@ -16,7 +16,7 @@ except:
     pass
 
 # 导入自定义模块
-from config import HOTKEY_CONFIGS, OPENROUTER_API_KEY
+from config import HOTKEY_CONFIGS
 from notification import show_notification, show_notification_stream
 from region_selector import RegionSelector, task_queue, result_queue
 from image_utils import take_screenshot, crop_and_encode_image
@@ -103,7 +103,7 @@ def process_hotkey(config):
         
         def content_iter():
             nonlocal final_result
-            for result in process_image_stream(base64_image, config['prompt'], config['model']):
+            for result in process_image_stream(base64_image, config['prompt'], config['model'], config['provider']):
                 if not result or not result.get('success'):
                     final_result = result  # 保存失败结果
                     yield "(AI分析失败)"
@@ -125,7 +125,7 @@ def process_hotkey(config):
         print_analysis_result(final_result)
     else:
         # 非流式
-        result = process_image_sync(base64_image, config['prompt'], config['model'])
+        result = process_image_sync(base64_image, config['prompt'], config['model'], config['provider'])
         if result['success']:
             if result['extracted_answer']:
                 show_notification("AI分析结果", result['extracted_answer'])
@@ -205,12 +205,6 @@ def main():
     except ImportError:
         print("错误: Pillow 的 Tkinter 支持未安装。")
         print("请尝试重新安装Pillow: pip install --upgrade Pillow")
-        input("按 Enter 键退出。")
-        sys.exit(1)
-
-    if not OPENROUTER_API_KEY:
-        print("错误: 未找到 OPENROUTER_API_KEY 环境变量。")
-        print("请确保在脚本同目录下创建了 .env 文件，并写入了您的API密钥。")
         input("按 Enter 键退出。")
         sys.exit(1)
 
